@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source">
+      <UniqueIdentifier>{f31a2a11-b645-44b6-9f1e-3e2aaf266d3d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="kernel.cu">
+      <Filter>Source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="tensor.cu">
+      <Filter>Source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="perceptor.cu">
+      <Filter>Source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="__init__.cu">
+      <Filter>Source</Filter>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="tensor.h">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="basics.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="perceptor.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="srcMeasure.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="basics.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
