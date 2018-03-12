@@ -8,17 +8,8 @@ __global__ void setDataKernel(Tensor* dev, dtype pValue) {
 }
 
 void Tensor::operator[](dtype aValue) {
-	if (mSize >= 10000) { // Run on GPU
-		sendToDevice(false);
-		setDataKernel <<<mSize / (BLOCK_DIM * BLOCK_DIM) + 1, BLOCK_DIM * BLOCK_DIM >>> (dev, aValue);
-		cudaThreadSynchronize();
-		retrievDataFromDevice(dev);
-		freeDevAndDevData();
-	}
-	else { // Run on CPU
-		for (int i = 0; i < mSize; i++)
-			data[i] = aValue;
-	}
+	for (int i = 0; i < mSize; i++)
+		data[i] = aValue;
 }
 
 void Tensor::operator[](const initializer_list<dtype>& aData) {
@@ -214,56 +205,68 @@ void Tensor::show(int floatLength, int floatPrecision, int floor) {
 	}
 }
 
-void Tensor::sendToDevice(bool sendData) {
-	Tensor* devPtr = 0;
-	CUDA_CHECK(cudaMalloc((void**)&devPtr, sizeof(Tensor)));
-	CUDA_CHECK(cudaMemcpy(devPtr, this, sizeof(Tensor), cudaMemcpyHostToDevice));
-
-	int* hostShape;
-	CUDA_CHECK(cudaMalloc((void**)&hostShape, sizeof(int) * this->dimension()));
-	CUDA_CHECK(cudaMemcpy(hostShape, this->mShape, sizeof(int) * this->dimension(), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(&(devPtr->mShape), &hostShape, sizeof(int*), cudaMemcpyHostToDevice));
-
-	int* hostCumulatedDimension;
-	CUDA_CHECK(cudaMalloc((void**)&hostCumulatedDimension, sizeof(int) * this->dimension()));
-	CUDA_CHECK(cudaMemcpy(hostCumulatedDimension, this->cumulatedDimension, sizeof(int) * this->dimension(), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(&(devPtr->cumulatedDimension), &hostCumulatedDimension, sizeof(int*), cudaMemcpyHostToDevice));
-	
-	// Set device tensor as container
-	CUDA_CHECK(cudaMemcpy(&devPtr->isContainer, new bool(true), sizeof(bool), cudaMemcpyHostToDevice));
-
-	// Copy host data to device
-	dtype* hostData;
-	CUDA_CHECK(cudaMalloc((void**)&hostData, sizeof(dtype) * this->size()));
-	if (sendData)
-		CUDA_CHECK(cudaMemcpy(hostData, this->data, sizeof(dtype) * this->size(), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(&(devPtr->data), &hostData, sizeof(dtype*), cudaMemcpyHostToDevice));
-	devData = hostData;
-	dev = devPtr;
-	devShape = hostShape;
-	devCumulatedDimension = hostCumulatedDimension;
-	mHaveDevPtr = true;
-	mHaveDevDataPtr = true;
-}
-
-void Tensor::sendDataToDevice() {
-	dtype* devPtr = 0;
-	CUDA_CHECK(cudaMalloc((void**)&devPtr, sizeof(dtype) * size()));
-	CUDA_CHECK(cudaMemcpy(devPtr, data, sizeof(dtype) * size(), cudaMemcpyHostToDevice));
-	devData = devPtr;
-	mHaveDevDataPtr = true;
-}
-
-void Tensor::retrievDataFromDevice(bool retreiveOnlyData) {
-	CUDA_CHECK(cudaMemcpy(data, devData, this->size() * sizeof(dtype), cudaMemcpyDeviceToHost));
-	if (!retreiveOnlyData) {
-		Tensor temp;
-		CUDA_CHECK(cudaMemcpy(&temp, dev, sizeof(Tensor), cudaMemcpyDeviceToHost));
-		CUDA_CHECK(cudaMemcpy(cumulatedDimension, temp.cumulatedDimension, this->dimension() * sizeof(int), cudaMemcpyDeviceToHost));
-		CUDA_CHECK(cudaMemcpy(mShape, temp.mShape, this->dimension() * sizeof(int), cudaMemcpyDeviceToHost));
-		temp.setName("");
-	}
-}
+//void Tensor::sendToDevice(bool sendData) {
+//	Tensor* devPtr = 0;
+//	cudaSetDevice(mDeviceId);
+//	CUDA_CHECK(cudaMalloc((void**)&devPtr, sizeof(Tensor)));
+//	CUDA_CHECK(cudaMemcpy(devPtr, this, sizeof(Tensor), cudaMemcpyHostToDevice));
+//
+//	int* hostShape;
+//	CUDA_CHECK(cudaMalloc((void**)&hostShape, sizeof(int) * this->dimension()));
+//	CUDA_CHECK(cudaMemcpy(hostShape, this->mShape, sizeof(int) * this->dimension(), cudaMemcpyHostToDevice));
+//	CUDA_CHECK(cudaMemcpy(&(devPtr->mShape), &hostShape, sizeof(int*), cudaMemcpyHostToDevice));
+//
+//	int* hostCumulatedDimension;
+//	CUDA_CHECK(cudaMalloc((void**)&hostCumulatedDimension, sizeof(int) * this->dimension()));
+//	CUDA_CHECK(cudaMemcpy(hostCumulatedDimension, this->cumulatedDimension, sizeof(int) * this->dimension(), cudaMemcpyHostToDevice));
+//	CUDA_CHECK(cudaMemcpy(&(devPtr->cumulatedDimension), &hostCumulatedDimension, sizeof(int*), cudaMemcpyHostToDevice));
+//	
+//	// Set device tensor as container
+//	CUDA_CHECK(cudaMemcpy(&devPtr->isContainer, new bool(true), sizeof(bool), cudaMemcpyHostToDevice));
+//
+//	// Copy host data to device
+//	dtype* hostData;
+//	CUDA_CHECK(cudaMalloc((void**)&hostData, sizeof(dtype) * this->size()));
+//	if (sendData)
+//		CUDA_CHECK(cudaMemcpy(hostData, this->data, sizeof(dtype) * this->size(), cudaMemcpyHostToDevice));
+//	CUDA_CHECK(cudaMemcpy(&(devPtr->data), &hostData, sizeof(dtype*), cudaMemcpyHostToDevice));
+//	devData = hostData;
+//	dev = devPtr;
+//	devShape = hostShape;
+//	devCumulatedDimension = hostCumulatedDimension;
+//	mHaveDevPtr = true;
+//	mHaveDevDataPtr = true;
+//}
+//
+//void Tensor::sendDataToDevice() {
+//	if (haveDevicePtr()) {
+//		dtype* devPtr = 0;
+//		cudaSetDevice(mDeviceId);
+//		cudaFree(devData);
+//		CUDA_CHECK(cudaMalloc((void**)&devPtr, sizeof(dtype) * size()));
+//		CUDA_CHECK(cudaMemcpy(devPtr, data, sizeof(dtype) * size(), cudaMemcpyHostToDevice));
+//		devData = devPtr;
+//		mHaveDevDataPtr = true;
+//	}
+//	else {
+//		cout << name() << " is not allocated at device" << endl;
+//		exit(EXIT_FAILURE);
+//	}
+//}
+//
+//void Tensor::retrievDataFromDevice(bool retreiveOnlyData) {
+//	if (haveDevicePtr() && haveDeviceDataPtr()) {
+//		cudaSetDevice(mDeviceId);
+//		CUDA_CHECK(cudaMemcpy(data, devData, this->size() * sizeof(dtype), cudaMemcpyDeviceToHost));
+//		if (!retreiveOnlyData) {
+//			Tensor temp;
+//			CUDA_CHECK(cudaMemcpy(&temp, dev, sizeof(Tensor), cudaMemcpyDeviceToHost));
+//			CUDA_CHECK(cudaMemcpy(cumulatedDimension, temp.cumulatedDimension, this->dimension() * sizeof(int), cudaMemcpyDeviceToHost));
+//			CUDA_CHECK(cudaMemcpy(mShape, temp.mShape, this->dimension() * sizeof(int), cudaMemcpyDeviceToHost));
+//			temp.setName("");
+//		}
+//	}
+//}
 
 bool Tensor::isSame(Tensor& other) {
 	for (int i = 0; i < mDimension; i++)
@@ -274,6 +277,7 @@ bool Tensor::isSame(Tensor& other) {
 }
 
 void Tensor::swapDimension(int dim1, int dim2) {
+	cudaSetDevice(mDeviceId);
 	if (dim1 >= mDimension || dim1 < 0 || dim2 >= mDimension || dim2 < 0) {
 		cout << "Cannot access " << mName << " " << dim1 << " or " << dim2 << endl;
 		exit(EXIT_FAILURE);

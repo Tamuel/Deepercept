@@ -2,14 +2,15 @@
 #include "srcMeasure.h"
 
 int main(void) {
-	
-	Perceptor p;
+	Perceptor p1(1);
+	Perceptor p2(0);
 	SrcMeasure sm;
-	p.getGpuInformation();
-	p.getCuBlasVersion();
-	p.getCuDnnVersion();
-	p.getGpuDriverVersion();
-	p.setSynchronizeGpuStream(true);
+	p1.getGpuInformation();
+	p1.getCuBlasVersion();
+	p1.getCuDnnVersion();
+	p1.getGpuDriverVersion();
+	p1.setSynchronizeGpuStream(false);
+	p2.setSynchronizeGpuStream(false);
 	
 	Tensor m1({ 3, 3 }, "m1", 1.0);
 	Tensor m2({ 3, 3 }, "m2", 1.0);
@@ -25,43 +26,43 @@ int main(void) {
 	m1.show();
 	m2.show();
 
-	Tensor* m3 = p.matAdd(&m1, &m2);
+	Tensor* m3 = p1.matAdd(&m1, &m2);
 	m3->setName("m1 + m2");
-	m3->retrievDataFromDevice();
+	p1.retrievDataFromDevice(m3);
 	m3->show();
 
-	Tensor* m4 = p.matMult(&m1, &m2);
+	Tensor* m4 = p1.matMult(&m1, &m2);
 	m4->setName("m1 x m2");
-	m4->retrievDataFromDevice();
+	p1.retrievDataFromDevice(m4);
 	m4->show();
 
-	Tensor* m5 = p.matSub(&m1, &m2);
+	Tensor* m5 = p1.matSub(&m1, &m2);
 	m5->setName("m1 - m2");
-	m5->retrievDataFromDevice();
+	p1.retrievDataFromDevice(m5);
 	m5->show();
 
-	p.matMult(2.0, &m1);
-	m1.retrievDataFromDevice();
+	p1.matMult(2.0, &m1);
+	p1.retrievDataFromDevice(&m1);
 	m1.show();
 
-	p.matSwap(&m1, &m2);
-	m1.retrievDataFromDevice();
-	m2.retrievDataFromDevice();
+	p1.matSwap(&m1, &m2);
+	p1.retrievDataFromDevice(&m1);
+	p1.retrievDataFromDevice(&m2);
 	m1.show();
 	m2.show();
 
-	int i = p.matMaxIndex(&m1);
-	int j = p.matMaxIndex(&m2);
+	int i = p1.matMaxIndex(&m1);
+	int j = p1.matMaxIndex(&m2);
 	cout << "m1 max : " << i << endl;
 	cout << "m2 max : " << j << endl;
 
-	i = p.matMinIndex(&m1);
-	j = p.matMinIndex(&m2);
+	i = p1.matMinIndex(&m1);
+	j = p1.matMinIndex(&m2);
 	cout << "m1 min : " << i << endl;
 	cout << "m2 min : " << j << endl;
 
-	dtype sum = p.matSum(&m1);
-	dtype sum2 = p.matSum(&m2);
+	dtype sum = p1.matSum(&m1);
+	dtype sum2 = p1.matSum(&m2);
 	cout << "m1 sum : " << sum << endl;
 	cout << "m2 sum : " << sum2 << endl;
 
@@ -71,8 +72,8 @@ int main(void) {
 	m6.show();
 	m7.show();
 
-	Tensor* m8 = p.matMult(&m6, &m7);
-	m8->retrievDataFromDevice();
+	Tensor* m8 = p1.matMult(&m6, &m7);
+	p1.retrievDataFromDevice(m8);
 	m8->show();
 
 	int size1 = 4096;
@@ -87,8 +88,8 @@ int main(void) {
 	m9.show(9, 0);
 	for (int i = 0; i < 10; i++) {
 		sm.startTime(0);
-		p.matTranspose(&m9);
-		m9.retrievDataFromDevice();
+		p1.matTranspose(&m9);
+		p1.retrievDataFromDevice(&m9);
 		sm.endTime(0, "Transpose time");
 		m9.show(9, 0);
 	}
@@ -97,24 +98,36 @@ int main(void) {
 	Tensor m11({ 4096, 4096 });
 	for (int i = 0; i < 4096; i++)
 		for (int j = 0; j < 4096; j++) {
-			m10(i, j) = i * 4096 + j;
-			m11(j, i) = i * 4096 + j;
+			m10(i, j) = float(i) / float(j + 1);
+			m11(j, i) = float(j) / float(i + 1);
+		}
+	Tensor m13({ 4096, 4096 });
+	Tensor m14({ 4096, 4096 });
+	for (int i = 0; i < 4096; i++)
+		for (int j = 0; j < 4096; j++) {
+			m13(i, j) = float(i) / float(j + 1);
+			m14(j, i) = float(j) / float(i + 1);
 		}
 
-	m10.show();
-	m11.show();
+	p1.sendToDevice(&m10);
+	p1.sendToDevice(&m11);
+	p2.sendToDevice(&m13);
+	p2.sendToDevice(&m14);
+
+	Tensor* temp = new Tensor({ 4096, 4096 });
+	p1.sendToDevice(temp);
+	Tensor* temp2 = new Tensor({ 4096, 4096 });
+	p2.sendToDevice(temp2);
+
 	sm.startTime(0);
-	p.matEltMult(&m12, &m10, &m11);
-	m12.retrievDataFromDevice();
-	sm.endTime(0, "Elt Mult time");
-	sm.startTime(0);
-	p.matEltMult(&m12, &m10, &m11);
-	m12.retrievDataFromDevice();
-	sm.endTime(0, "Elt Mult time");
-	m12.show();
-	dtype* data;
-	sm.startTime(0);
-	cudaMalloc((void**)&data, sizeof(dtype) * 4096 * 4096);
-	double elapsedTime = sm.endTime(0, "Alloc time");
-	cout << 1 / elapsedTime << endl;
+	for (int i = 0; i < 200; i++) {
+		p1.matMult(temp, &m10, &m11);
+		p2.matMult(temp2, &m13, &m14);
+	}
+	p1.retrievDataFromDevice(temp);
+	p2.retrievDataFromDevice(temp2);
+	double elapsedTime = sm.endTime(0, "Alloc time 2");
+
+	temp->show();
+	temp2->show();
 }

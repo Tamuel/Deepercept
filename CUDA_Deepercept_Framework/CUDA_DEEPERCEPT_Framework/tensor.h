@@ -68,6 +68,9 @@ private:
 	// Is this tensor have device pointer for data
 	bool mHaveDevDataPtr;
 
+	// Device ID for where this tensor will be allocated
+	int mDeviceId;
+
 	// Pointer of this tensor in device
 	Tensor* dev;
 
@@ -134,7 +137,7 @@ public:
 	Tensor data is initialized to 0.
 	*/
 	Tensor(const initializer_list<int>& aShape, string aName = "Tensor" + to_string(num),
-		dtype aInitValue = 0.0, bool toInitValue = true) : mSize(1) {
+		dtype aInitValue = 0.0, bool toInitValue = true) : mSize(1), mDeviceId(0) {
 		initAttributes();
 		setName(aName);
 		setShape(aShape);
@@ -225,6 +228,10 @@ public:
 		return mHaveDevPtr;
 	}
 
+	const bool haveDeviceDataPtr() {
+		return mHaveDevDataPtr;
+	}
+
 	void setName(string newName) {
 		strncpy(mName, newName.c_str(), sizeof(char) * newName.size() + 1);
 		mName[sizeof(newName) - 1] = 0;
@@ -285,16 +292,33 @@ public:
 		cudaFree(devData);
 	}
 
-	// Allocate this tensor to device and return device pointer of allocated tensor
-	void sendToDevice(bool sendData = true);
+	void setDevice(int aDeviceId) {
+		mDeviceId = aDeviceId;
+	}
 
-	// Allocate data to device and return device pointer of allocated data
-	void sendDataToDevice();
+	// Device ID for where this tensor will be allocated
+	int deviceId() {
+		return mDeviceId;
+	}
 
-	// Retrieve data from tensor device pointer
-	void retrievDataFromDevice(bool retreiveOnlyData = true);
+	//// Allocate this tensor to device and return device pointer of allocated tensor
+	//void sendToDevice(bool sendData = true);
+
+	//// Allocate data to device and return device pointer of allocated data
+	//void sendDataToDevice();
+
+	//// Retrieve data from tensor device pointer
+	//void retrievDataFromDevice(bool retreiveOnlyData = true);
 	
+	// Show tensor data, if you want to see current data in device you need to retreive data first (retrieveDataFromDevice)
 	void show(int floatLength = 9, int floatPrecision = 3, int floor = -4);
+
+	// Show tensor data, if you want to see current data in device you need to retreive data first (retrieveDataFromDevice)
+	void show2() {
+		for (int i = 0; i < mSize; i++)
+			printf("%f  ", data[i]);
+		cout << endl;
+	}
 
 	// Swap shape[dim1] and shape[dim2]
 	void swapDimension(int dim1, int dim2);
@@ -302,11 +326,6 @@ public:
 	// Reshape current tensor, if forceReshape is true than you can forcedly reshape tensor, but can loose data
 	void reshape(const initializer_list<int>& aShape, bool forceReshape = false);
 
-	void show2() {
-		for (int i = 0; i < mSize; i++)
-			printf("%f  ", data[i]);
-		cout << endl;
-	}
 };
 
 #endif

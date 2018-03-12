@@ -14,13 +14,24 @@ void __syncthreads();
 #endif
 
 #define MATRIX_DIM_LIMIT 4096
+#define N_MAXIMUM_GPU 4
 
 
 class Perceptor{
 private:
+	// Store which GPU is now utilize
+	static bool gpuUtilization[N_MAXIMUM_GPU];
+
+	// Handle for cuBals
 	cublasHandle_t cuBlasHandle;
+	// Handle for cuDNN
 	cudnnHandle_t cuDnnHandle;
+
+	// Dummy tensor for matrix calculation efficiency
 	Tensor* dummyTensor;
+
+	// Specific GPU ID for this perceptor
+	int mDeviceId;
 
 	// To synchronize GPU stream or not
 	bool synchronizeStream;
@@ -105,21 +116,38 @@ private:
 	}
 
 	void syncGpuStream() {
-		if (synchronizeStream)
+		if (synchronizeStream) {
 			cudaDeviceSynchronize();
+		}
+	}
+
+	void setDevice() {
+		cudaSetDevice(mDeviceId);
 	}
 
 public:
-	Perceptor() {
+	Perceptor(int aDeviceId = 0) {
+		if (gpuUtilization[aDeviceId] == true) {
+			cout << "GPU" << aDeviceId << " already assigned" << endl;
+			exit(EXIT_FAILURE);
+		}
+
+		mDeviceId = aDeviceId;
+		gpuUtilization[mDeviceId] = true;
+
+		cudaSetDevice(mDeviceId);
 		cublasCreate(&cuBlasHandle);
 		cudnnCreate(&cuDnnHandle);
 
 		synchronizeStream = true;
 		dummyTensor = new Tensor({ MATRIX_DIM_LIMIT, MATRIX_DIM_LIMIT });
-		dummyTensor->sendToDevice();
+		dummyTensor->setDevice(mDeviceId);
+
+		sendToDevice(dummyTensor);
 	}
 
 	~Perceptor() {
+		gpuUtilization[mDeviceId] = false;
 		cublasDestroy(cuBlasHandle);
 		cudnnDestroy(cuDnnHandle);
 	}
@@ -127,6 +155,11 @@ public:
 	void setSynchronizeGpuStream(bool aSync) {
 		synchronizeStream = aSync;
 	}
+
+	// Check tensor tA and tB are in same device
+	void checkDevice(Tensor* tA, Tensor* tB);
+	// Check device ID of perceptor and device ID of tensor tB are same
+	void checkDevice(Tensor* tB);
 
 	// Matrix operations
 	// Return = alpha * ( tA x tB ) + beta * Out
@@ -189,6 +222,19 @@ public:
 	void getCuBlasVersion();
 
 	void getGpuDriverVersion();
+
+	int deviceId() {
+		return mDeviceId;
+	}
+
+	// Allocate tensor t to device and return device pointer of allocated tensor
+	void sendToDevice(Tensor* t, bool sendData = true);
+
+	// Allocate tensor t data to device and return device pointer of allocated data
+	void sendDataToDevice(Tensor* t);
+
+	// Retrieve tensor t data from tensor device pointer
+	void retrievDataFromDevice(Tensor* t, bool retreiveOnlyData = true);
 };
 
 #endif
