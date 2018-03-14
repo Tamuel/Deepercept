@@ -1,6 +1,6 @@
 #ifndef TENSOR_H
 #define TENSOR_H
-#include "basics.h"
+#include "base.h"
 
 #if defined(NDEBUG) // If release mode
 #define CUDA_CHECK(x) (x)
@@ -23,12 +23,12 @@
 #define VECTOR_SIZE 8
 
 
-enum tensorIndex{ROW, COL};
+enum tensorIndex {COL, ROW};
 
-enum tensorType {FLOAT32, FLOAT64, INT32, INT64, BOOL};
-
+enum tensorDataType {FLOAT32, FLOAT64, INT32, INT64, BOOL};
 
 // Tensor class which is first class for data flow of deep learning framework
+// With column major
 class Tensor
 {
 private:
@@ -42,7 +42,7 @@ private:
 	char mName[NAME_LENGTH]; // String object cannot run on CUDA device
 
 	// Data type
-	tensorType mType;
+	tensorDataType mDataType;
 
 	// Shape of tensor
 	// Ex) {3, 3, 3}
@@ -58,6 +58,8 @@ private:
 
 	// For access data like tensor
 	int* cumulatedDimension;
+	// For print data like tensor
+	int* reCumulatedDimension;
 
 	// Is this just container for Device pointer
 	bool isContainer;
@@ -85,13 +87,13 @@ private:
 
 	// Return real position of data with one dimenstional array
 	template<typename... Args>
-	__host__ __device__ int tensorPosition(int* accessDimension, int pos, Args... args) {
-		return pos * cumulatedDimension[++(*accessDimension) - 1] + tensorPosition(accessDimension, args...);
+	__host__ __device__ int tensorPosition(int accessDimension, int pos, Args... args) {
+		return pos * cumulatedDimension[accessDimension] + tensorPosition(accessDimension + 1, args...);
 	}
 
 	// Just return position
-	__host__ __device__ int tensorPosition(int* accessDimension, int pos) {
-		return pos;
+	__host__ __device__ int tensorPosition(int accessDimension, int pos) {
+		return pos * cumulatedDimension[accessDimension];
 	}
 
 	void allocateData(dtype aInitValue = 0.0, bool toInitValue = true) {
@@ -113,7 +115,7 @@ private:
 
 	void initAttributes() {
 		num++;
-		mType = FLOAT32;
+		mDataType = FLOAT32;
 		dev = NULL;
 		devData = NULL;
 		mHaveDevPtr = false;
@@ -212,8 +214,8 @@ public:
 		return string(mName);
 	}
 
-	const tensorType type() {
-		return mType;
+	const tensorDataType type() {
+		return mDataType;
 	}
 
 	const int row() {
@@ -239,8 +241,7 @@ public:
 
 	template<typename... Args>
 	__host__ __device__ dtype& operator()(int i, Args... args) {
-		int accessDimension = 0;
-		int pos = tensorPosition(&accessDimension, i, args...);
+		int pos = tensorPosition(0, i, args...);
 		if (pos >= mSize) {
 			printf("Cannot access %d element of %s!\n", pos, mName);
 			//exit(1);
@@ -311,13 +312,25 @@ public:
 	//void retrievDataFromDevice(bool retreiveOnlyData = true);
 	
 	// Show tensor data, if you want to see current data in device you need to retreive data first (retrieveDataFromDevice)
-	void show(int floatLength = 9, int floatPrecision = 3, int floor = -4);
+	void print(bool NHWC = false, int floatLength = 9, int floatPrecision = 3, int floor = -4);
 
 	// Show tensor data, if you want to see current data in device you need to retreive data first (retrieveDataFromDevice)
-	void show2() {
-		for (int i = 0; i < mSize; i++)
-			printf("%f  ", data[i]);
+	void print2() {
+		cout << name() << " ["; printShape(); cout << "]";
+		for (int i = 0; i < mSize; i++) {
+			cout << f_to_s(data[i]) << "  ";
+			if ((i + 1) % 8 == 0)
+				cout << endl;
+		}
 		cout << endl;
+	}
+
+	void printShape() {
+		for (int i = mDimension - 1; i >= 0; i--)
+			if(i != 0)
+				cout << shape(i) << " x ";
+			else
+				cout << shape(i);
 	}
 
 	// Swap shape[dim1] and shape[dim2]

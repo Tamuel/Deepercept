@@ -169,14 +169,14 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="basics.cpp" />
+    <ClCompile Include="base.cpp" />
     <ClCompile Include="tensor.h" />
     <CudaCompile Include="__init__.cu">
       <FileType>CppCode</FileType>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="basics.h" />
+    <ClInclude Include="base.h" />
     <ClInclude Include="perceptor.h" />
     <ClInclude Include="srcMeasure.h" />
   </ItemGroup>

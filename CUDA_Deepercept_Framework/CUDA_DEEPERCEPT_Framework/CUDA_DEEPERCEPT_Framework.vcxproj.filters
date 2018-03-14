@@ -4,38 +4,50 @@
     <Filter Include="Source">
       <UniqueIdentifier>{f31a2a11-b645-44b6-9f1e-3e2aaf266d3d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Tensor">
+      <UniqueIdentifier>{1bb259ee-fc20-4c64-a2c9-c79624e0d03d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Base">
+      <UniqueIdentifier>{821a6b5e-2a19-476c-a812-9f4874b75897}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\Perceptor">
+      <UniqueIdentifier>{8cdea11c-a7ae-4303-a364-63a334474bff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\GUI">
+      <UniqueIdentifier>{d27a45ed-c622-43d9-920c-2f125395b6f4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="kernel.cu">
       <Filter>Source</Filter>
     </CudaCompile>
-    <CudaCompile Include="tensor.cu">
-      <Filter>Source</Filter>
-    </CudaCompile>
-    <CudaCompile Include="perceptor.cu">
-      <Filter>Source</Filter>
-    </CudaCompile>
     <CudaCompile Include="__init__.cu">
       <Filter>Source</Filter>
+    </CudaCompile>
+    <CudaCompile Include="tensor.cu">
+      <Filter>Source\Tensor</Filter>
+    </CudaCompile>
+    <CudaCompile Include="perceptor.cu">
+      <Filter>Source\Perceptor</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="tensor.h">
-      <Filter>Source</Filter>
+      <Filter>Source\Tensor</Filter>
     </ClCompile>
-    <ClCompile Include="basics.cpp">
-      <Filter>Source</Filter>
+    <ClCompile Include="base.cpp">
+      <Filter>Source\Base</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="base.h">
+      <Filter>Source\Base</Filter>
+    </ClInclude>
     <ClInclude Include="perceptor.h">
-      <Filter>Source</Filter>
+      <Filter>Source\Perceptor</Filter>
     </ClInclude>
     <ClInclude Include="srcMeasure.h">
-      <Filter>Source</Filter>
-    </ClInclude>
-    <ClInclude Include="basics.h">
-      <Filter>Source</Filter>
+      <Filter>Source\Base</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

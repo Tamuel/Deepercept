@@ -304,7 +304,7 @@ c:\program files\nvidia gpu computing toolkit\cuda\v8.0\include\vector_functions
 c:\program files\nvidia gpu computing toolkit\cuda\v8.0\include\device_launch_parameters.h
 c:\program files\nvidia gpu computing toolkit\cuda\v8.0\include\vector_types.h
 d:\projects for study\deepercept\cuda_deepercept_framework\cuda_deepercept_framework\perceptor.h
-d:\projects for study\deepercept\cuda_deepercept_framework\cuda_deepercept_framework\basics.h
+d:\projects for study\deepercept\cuda_deepercept_framework\cuda_deepercept_framework\base.h
 C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\iostream
 C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\istream
 C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\ostream
@@ -396,6 +396,11 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include\cuda_runtime.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include\cuda_runtime_api.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include\device_launch_parameters.h
 d:\projects for study\deepercept\cuda_deepercept_framework\cuda_deepercept_framework\tensor.h
+d:\projects for study\deepercept\cuda_deepercept_framework\cuda_deepercept_framework\srcMeasure.h
+C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\chrono
+C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\ratio
+C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\thr/xtimec.h
+C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\thr/xthrcommon.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include\cublas.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include\cuda_runtime.h
 c:\program files\nvidia gpu computing toolkit\cuda\v8.0\include\cublas_api.h
@@ -411,8 +416,3 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include\cublas_api.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include\cudnn.h
 c:\program files\nvidia gpu computing toolkit\cuda\v8.0\include\driver_types.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v8.0\include\cuda_runtime.h
-d:\projects for study\deepercept\cuda_deepercept_framework\cuda_deepercept_framework\srcMeasure.h
-C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\chrono
-C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\ratio
-C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\thr/xtimec.h
-C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\include\thr/xthrcommon.h

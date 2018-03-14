@@ -1,8 +1,9 @@
 #ifndef PERCEPTOR_H
 #define PERCEPTOR_H
 
-#include "basics.h"
+#include "base.h"
 #include "tensor.h"
+#include "srcMeasure.h"
 #include <cublas.h>
 #include <cublas_v2.h>
 #include <cublas_api.h>
@@ -27,8 +28,14 @@ private:
 	// Handle for cuDNN
 	cudnnHandle_t cuDnnHandle;
 
+	// Convolution forward algorithm preferance
+	cudnnConvolutionFwdAlgo_t convFwdAlg;
+
 	// Dummy tensor for matrix calculation efficiency
 	Tensor* dummyTensor;
+
+	// Set true if you want to debug and carry about limit condition of operations, if you don't need that then set false
+	bool debugMode;
 
 	// Specific GPU ID for this perceptor
 	int mDeviceId;
@@ -121,23 +128,29 @@ private:
 		}
 	}
 
+	void setDevice(int aDeviceId) {
+		cudaSetDevice(aDeviceId);
+	}
+
 	void setDevice() {
 		cudaSetDevice(mDeviceId);
 	}
 
 public:
-	Perceptor(int aDeviceId = 0) {
+	Perceptor(int aDeviceId = 0, bool aDebugMode = true) {
 		if (gpuUtilization[aDeviceId] == true) {
 			cout << "GPU" << aDeviceId << " already assigned" << endl;
 			exit(EXIT_FAILURE);
 		}
 
+		debugMode = aDebugMode;
+
 		mDeviceId = aDeviceId;
 		gpuUtilization[mDeviceId] = true;
 
 		cudaSetDevice(mDeviceId);
-		cublasCreate(&cuBlasHandle);
-		cudnnCreate(&cuDnnHandle);
+		CuBLAS_ERROR(cublasCreate(&cuBlasHandle));
+		CuDNN_ERROR(cudnnCreate(&cuDnnHandle));
 
 		synchronizeStream = true;
 		dummyTensor = new Tensor({ MATRIX_DIM_LIMIT, MATRIX_DIM_LIMIT });
@@ -214,6 +227,12 @@ public:
 	// (Scalar) Return = Sum of matrix elements
 	dtype matSum(Tensor* tA);
 
+	// Set random value from min to max with variance var
+	void matRand(Tensor* tA, dtype min, dtype max);
+
+	// Execute convolution operation with tInput tensor and tFilter tensor. And then return pointer of this perceptor
+	Perceptor* convolution(Tensor* tInput, Tensor* tFilter, Tensor* tOutput);
+
 	// The other operations
 	void getGpuInformation();
 
@@ -235,6 +254,188 @@ public:
 
 	// Retrieve tensor t data from tensor device pointer
 	void retrievDataFromDevice(Tensor* t, bool retreiveOnlyData = true);
+
+	void testNetwork() {
+		Tensor bias({ 1, 1, 3, 3 }, "temp", 2.3); // NCHW
+		Tensor dest({ 1, 1, 3, 3 }, "temp2", 2.5); // NCHW
+		Tensor dest2({ 1, 1, 3, 3 }, "Conv1_input", 0); // NCHW
+		cudnnTensorDescriptor_t t_desc;
+		SrcMeasure sm;
+		sm.startTime(0);
+		cudnnCreateTensorDescriptor(&t_desc);
+		//printf("%d %d %d %d\n", bias.shape(0), bias.shape(1), bias.shape(2), bias.shape(3));
+		cudnnSetTensor4dDescriptor(t_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, bias.shape(0), bias.shape(1), bias.shape(2), bias.shape(3));
+		//cudnnSetTensor4dDescriptorEx()
+		sm.endTime(0, "Set descriptor");
+		//cudnnTransformTensor()
+		sm.startTime(0);
+		sendToDevice(&bias);
+		sm.endTime(0, "Send bias");
+		sm.startTime(0);
+		sendToDevice(&dest);
+		sm.endTime(0, "Send dest");
+		float value = 3.5;
+		cudnnSetTensor(
+			cuDnnHandle,
+			t_desc,
+			dest.devDataPtr(),
+			&value
+		);
+
+		float alpha = 1;
+		CuDNN_ERROR(
+			cudnnAddTensor( // Add bias to dest
+				cuDnnHandle,
+				&alpha, // Coefficient
+				t_desc, // Bias tensor descriptor
+				bias.devDataPtr(), // Bias tensor data pointer
+				&alpha, // Coefficient
+				t_desc, // Destination tensor descriptor
+				dest.devDataPtr() // Destination tensor data
+			)
+		);
+
+		sendToDevice(&dest2);
+		cudnnOpTensorDescriptor_t t_op_desc;
+		cudnnCreateOpTensorDescriptor(&t_op_desc);
+		cudnnSetOpTensorDescriptor(t_op_desc, CUDNN_OP_TENSOR_ADD, CUDNN_DATA_FLOAT, CUDNN_NOT_PROPAGATE_NAN);
+
+		float beta = 0;
+		CuDNN_ERROR(
+			cudnnOpTensor(
+				cuDnnHandle,
+				t_op_desc,
+				&alpha,
+				t_desc,
+				bias.devDataPtr(),
+				&alpha,
+				t_desc,
+				dest.devDataPtr(),
+				&beta,
+				t_desc,
+				dest2.devDataPtr()
+			)
+		);
+
+		
+		float scale = 1.5;
+		CuDNN_ERROR(
+			cudnnScaleTensor(
+				cuDnnHandle,
+				t_desc,
+				dest2.devDataPtr(),
+				&scale
+			)
+		);
+
+		Tensor conv_filter1({ 1, 1, 3, 3 }, "Conv_filter", 0);
+
+		cudnnFilterDescriptor_t filter_desc;
+		cudnnCreateFilterDescriptor(&filter_desc);
+		cudnnSetFilter4dDescriptor(filter_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW, conv_filter1.shape(0), conv_filter1.shape(1), conv_filter1.shape(2), conv_filter1.shape(3));
+	
+		cudnnConvolutionDescriptor_t conv_desc;
+		cudnnCreateConvolutionDescriptor(&conv_desc);
+		CuDNN_ERROR(
+			cudnnSetConvolution2dDescriptor(
+				conv_desc, // convDesc
+				1, // pad_h
+				1, // pad_w
+				1, // u
+				1, // v
+				1, // dialation_h
+				1, // dialation_w
+				CUDNN_CROSS_CORRELATION // convolutionMode
+			)
+		);
+
+		int n, c, h, w;
+		cudnnGetConvolution2dForwardOutputDim(
+			conv_desc,
+			t_desc,
+			filter_desc,
+			&n,
+			&c,
+			&h,
+			&w
+		);
+
+		Tensor conv1({ n, c, h, w }, "Conv1", 0);
+		conv1.printShape();
+		sm.startTime(1);
+		cudnnTensorDescriptor_t conv1_desc;
+		cudnnCreateTensorDescriptor(&conv1_desc);
+		cudnnSetTensor4dDescriptor(conv1_desc, CUDNN_TENSOR_NCHW, CUDNN_DATA_FLOAT, n, c, h, w);
+		sm.endTime(1, "Descriptor create time");
+
+
+		sm.startTime(0);
+		sendToDevice(&conv_filter1);
+		matRand(&conv_filter1, -1, 1);
+		sm.endTime(0, "Send filter");
+		sm.startTime(0);
+		sendToDevice(&conv1);
+		sm.endTime(0, "Send conv");
+		sm.startTime(1);
+		int returnedAlgoCount[3];
+		cudnnConvolutionFwdAlgoPerf_t conv_perf[3];
+		cudnnFindConvolutionForwardAlgorithm(
+			cuDnnHandle,
+			t_desc,
+			filter_desc,
+			conv_desc,
+			conv1_desc,
+			3,
+			returnedAlgoCount,
+			conv_perf
+		);
+		sm.endTime(1, "Get prefer convolution algorithm");
+
+		Tensor conv_input({ 1, 1, 3, 3 }, "Conv_input", 0);
+		sendToDevice(&conv_input);
+		dtype k = 1;
+		cudnnSetTensor(
+			cuDnnHandle,
+			t_desc,
+			conv_input.devDataPtr(),
+			&k
+		);
+
+		retrievDataFromDevice(&conv_filter1);
+		conv_filter1.print(true);
+		conv_filter1.print2();
+
+		retrievDataFromDevice(&conv_input);
+		conv_input.print(true);
+		conv_input.print2();
+		alpha = 1; beta = 0;
+		CuDNN_ERROR(
+			cudnnConvolutionForward( // Column major approach
+				cuDnnHandle, // Handle
+				&alpha, // Alpha : Input tensor coefficient
+				t_desc, // xDesc
+				conv_input.devDataPtr(), // *x
+				filter_desc, // wDesc
+				conv_filter1.devDataPtr(), // *w
+				conv_desc, // convDesc
+				CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM, // Algo
+				NULL, // *workSpace
+				0, // workSpaceSizeInBytes
+				&beta, // *beta : Output tensor coefficient
+				conv1_desc, // yDesc
+				conv1.devDataPtr() // *y
+			)
+		);
+
+		retrievDataFromDevice(&conv1);
+		conv1.print(true);
+		conv1.print2();
+
+		cudnnDestroyTensorDescriptor(t_desc);
+		cudnnDestroyOpTensorDescriptor(t_op_desc);
+		cudnnDestroyFilterDescriptor(filter_desc);
+		cudnnDestroyConvolutionDescriptor(conv_desc);
+	}
 };
 
 #endif

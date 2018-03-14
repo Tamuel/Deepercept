@@ -21,184 +21,115 @@ void Tensor::operator[](const initializer_list<dtype>& aData) {
 	}
 }
 
-void Tensor::show(int floatLength, int floatPrecision, int floor) {
+void Tensor::print(bool NHWC, int floatLength, int floatPrecision, int floor) {
 	cout << "  " << mName << " [";
-	for (int i = 0; i < mDimension; i++) {
-		cout << mShape[i];
-		if (i != mDimension - 1)
-			cout << " x ";
-	}
+	printShape();
 	cout << "]" << endl;
 	
 	int maximumWidth = floatLength + 2;
-	int indexWidth = floatLength - 2;
-
+	int indexWidth = floatLength;
 	switch (mDimension) {
 	case 1:
 		if (mSize <= maximumWidth) {
 			cout << setw(indexWidth) << "" << " ";
-			for (int i = 0; i < mShape[0]; i++) {
-				string temp = "[" + to_string(i) + "]";
+			for (int x = 0; x < shape(0); x++) {
+				string temp = "[" + to_string(x) + "]";
 				cout << setw(floatLength) << right << temp << "  ";
 			}
 			cout << endl;
 
 			cout << setw(indexWidth) << "[0]" << " ";
-			for (int i = 0; i < mSize; i++)
-				cout << setw(floatLength) << f_to_s((*this)(i), floatLength, floatPrecision, floor) << "  ";
+			for (int x = 0; x < mSize; x++)
+				cout << setw(floatLength) << f_to_s((*this)(x), floatLength, floatPrecision, floor) << "  ";
 			cout << endl;
 		}
 		else {
 			cout << setw(indexWidth) << "" << " ";
-			for (int i = 0; i < maximumWidth / 2; i++) {
-				string temp = "[" + to_string(i) + "]";
+			for (int x = 0; x < maximumWidth / 2; x++) {
+				string temp = "[" + to_string(x) + "]";
 				cout << setw(floatLength) << right << temp << "  ";
 			}
 			cout << setw(floatLength) << right << "..." << "  ";
-			for (int i = mShape[0] - maximumWidth / 2; i < mShape[0]; i++) {
-				string temp = "[" + to_string(i) + "]";
+			for (int x = shape(0) - maximumWidth / 2; x < shape(0); x++) {
+				string temp = "[" + to_string(x) + "]";
 				cout << setw(floatLength) << right << temp << "  ";
 			}
 			cout << endl;
 
 			cout << setw(indexWidth) << "[0]" << " ";
-			for (int i = 0; i < maximumWidth / 2; i++)
-				cout << setw(floatLength) << f_to_s((*this)(i), floatLength, floatPrecision, floor) << "  ";
+			for (int x = 0; x < maximumWidth / 2; x++)
+				cout << setw(floatLength) << f_to_s((*this)(x), floatLength, floatPrecision, floor) << "  ";
 
 			cout << setw(floatLength) << right << "..." << "  ";
 
-			for (int i = mShape[0] - maximumWidth / 2; i < mShape[0]; i++)
-				cout << setw(floatLength) << f_to_s((*this)(i), floatLength, floatPrecision, floor) << "  ";
-			
+			for (int x = shape(0) - maximumWidth / 2; x < shape(0); x++)
+				cout << setw(floatLength) << f_to_s((*this)(x), floatLength, floatPrecision, floor) << "  ";
+
 			cout << endl;
 		}
 		break;
 
 	case 2:
-		if (mShape[0] <= maximumWidth && mShape[1] <= maximumWidth) {
-			cout << setw(indexWidth) << "" << " ";
-			for (int i = 0; i < mShape[1]; i++) {
-				string temp = "[" + to_string(i) + "]";
-				cout << setw(floatLength) << right << temp << "  ";
+		// Print blank
+		cout << setw(indexWidth) << "";
+
+		// Print column index
+		for (int col = 0; col < shape(COL); col++) {
+			cout << setw(indexWidth) << right << ("[" + to_string(col) + "]");
+		}
+		cout << endl;
+
+		// Print data
+		for (int row = 0; row < shape(ROW); row++) {
+			cout << setw(indexWidth) << right << ("[" + to_string(row) + "]"); // Print row index
+			for (int col = 0; col < shape(COL); col++)
+				cout << setw(floatLength) << right << f_to_s((*this)(col, row), floatLength, floatPrecision, floor);
+			cout << endl;
+		}
+		break;
+	case 3:
+		for (int z = 0; z < shape(0); z++) {
+			// Print blank
+			cout << setw(indexWidth) << ("[" + to_string(z) + "]");
+
+			// Print column index
+			for (int col = 0; col < shape(COL + 1); col++) {
+				cout << setw(indexWidth) << right << ("[" + to_string(col) + "]");
 			}
 			cout << endl;
 
-			for (int i = 0; i < mShape[0]; i++) {
-				string temp = "[" + to_string(i) + "]";
-				cout << setw(indexWidth) << temp << " ";
-				for (int j = 0; j < mShape[1]; j++)
-					cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
+			// Print data
+			for (int row = 0; row < shape(ROW + 1); row++) {
+				cout << setw(indexWidth) << right << ("[" + to_string(row) + "]"); // Print row index
+				for (int col = 0; col < shape(COL + 1); col++)
+					cout << setw(floatLength) << right << f_to_s((*this)(z, col, row), floatLength, floatPrecision, floor);
 				cout << endl;
 			}
+			
+			cout << endl;
 		}
-		else {
-			if (mShape[0] > maximumWidth && mShape[1] > maximumWidth) {
-				cout << setw(indexWidth) << "" << " ";
-				for (int i = 0; i < maximumWidth / 2; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(floatLength) << right << temp << "  ";
-				}
-				cout << setw(floatLength) << right << "..." << "  ";
-				for (int i = mShape[1] - maximumWidth / 2; i < mShape[1]; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(floatLength) << right << temp << "  ";
-				}
-				cout << endl;
-				for (int i = 0; i < maximumWidth / 2; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(indexWidth) << temp << " ";
+		break;
+	case 4:
+		for (int w = 0; w < shape(0); w++) {
+			for (int z = 0; z < shape(1); z++) {
+				// Print blank
+				cout << setw(indexWidth) << ("[" + to_string(w) + ", " + to_string(z) + "]");
 
-					for (int j = 0; j < maximumWidth / 2; j++)
-						cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
-
-					cout << setw(floatLength) << right << "..." << "  ";
-
-					for (int j = mShape[1] - maximumWidth / 2; j < mShape[1]; j++)
-						cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
-
-					cout << endl;
-				}
-
-				for (int j = 0; j < 3; j++) {
-					cout << setw(indexWidth) << "." << " ";
-					for (int i = 0; i < maximumWidth; i++)
-						cout << setw(floatLength) << right << "." << "  ";
-					cout << endl;
-				}
-
-				for (int i = mShape[0] - maximumWidth / 2; i < mShape[0]; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(indexWidth) << temp << " ";
-
-					for (int j = 0; j < maximumWidth / 2; j++)
-						cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
-
-					cout << setw(floatLength) << right << "..." << "  ";
-
-					for (int j = mShape[1] - maximumWidth / 2; j < mShape[1]; j++)
-						cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
-
-					cout << endl;
-				}
-			}
-			else if (mShape[0] <= maximumWidth && mShape[1] > maximumWidth) {
-				cout << setw(indexWidth) << "" << " ";
-				for (int i = 0; i < maximumWidth / 2; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(floatLength) << right << temp << "  ";
-				}
-				cout << setw(floatLength) << right << "..." << "  ";
-				for (int i = mShape[1] - maximumWidth / 2; i < mShape[1]; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(floatLength) << right << temp << "  ";
+				// Print column index
+				for (int col = 0; col < shape(COL + 2); col++) {
+					cout << setw(indexWidth) << right << ("[" + to_string(col) + "]");
 				}
 				cout << endl;
 
-				for (int i = 0; i < mShape[0]; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(indexWidth) << temp << " ";
-
-					for (int j = 0; j < maximumWidth / 2; j++)
-						cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
-
-					cout << setw(floatLength) << right << "..." << "  ";
-
-					for (int j = mShape[1] - maximumWidth / 2; j < mShape[1]; j++)
-						cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
-
+				// Print data
+				for (int row = 0; row < shape(ROW + 2); row++) {
+					cout << setw(indexWidth) << right << ("[" + to_string(row) + "]"); // Print row index
+					for (int col = 0; col < shape(COL + 2); col++)
+						cout << setw(floatLength) << right << f_to_s((*this)(w, z, col, row), floatLength, floatPrecision, floor);
 					cout << endl;
 				}
-			}
-			else if (mShape[0] > maximumWidth && mShape[1] <= maximumWidth) {
-				cout << setw(indexWidth) << "" << " ";
-				for (int i = 0; i < mShape[1]; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(floatLength) << right << temp << "  ";
-				}
+
 				cout << endl;
-
-				for (int i = 0; i < maximumWidth / 2; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(indexWidth) << temp << " ";
-					for (int j = 0; j < mShape[1]; j++)
-						cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
-					cout << endl;
-				}
-
-				for (int j = 0; j < 3; j++) {
-					cout << setw(indexWidth) << "." << " ";
-					for (int i = 0; i < mShape[1]; i++)
-						cout << setw(floatLength) << right << "." << "  ";
-					cout << endl;
-				}
-
-				for (int i = mShape[0] - maximumWidth / 2; i < mShape[0]; i++) {
-					string temp = "[" + to_string(i) + "]";
-					cout << setw(indexWidth) << temp << " ";
-					for (int j = 0; j < mShape[1]; j++)
-						cout << setw(floatLength) << f_to_s((*this)(i, j), floatLength, floatPrecision, floor) << "  ";
-					cout << endl;
-				}
 			}
 		}
 		break;
@@ -270,7 +201,7 @@ void Tensor::show(int floatLength, int floatPrecision, int floor) {
 
 bool Tensor::isSame(Tensor& other) {
 	for (int i = 0; i < mDimension; i++)
-		if (mShape[i] != other.shape()[i])
+		if (shape(i) != other.shape(i))
 			return false;
 
 	return true;
@@ -283,8 +214,8 @@ void Tensor::swapDimension(int dim1, int dim2) {
 		exit(EXIT_FAILURE);
 	}
 
-	int temp = mShape[dim1];
-	mShape[dim1] = mShape[dim2];
+	int temp = shape(dim1);
+	mShape[dim1] = shape(dim2);
 	mShape[dim2] = temp;
 
 	setCumulatedDimension();
@@ -331,10 +262,8 @@ void Tensor::reshape(const initializer_list<int>& aShape, bool forceReshape) {
 
 void Tensor::setCumulatedDimension() {
 	cumulatedDimension = new int[mDimension];
-	for (int i = 0; i < mDimension; i++) {
-		int tempCumDim = 1;
-		for (int j = i + 1; j < mDimension; j++)
-			tempCumDim *= mShape[j];
-		cumulatedDimension[i] = tempCumDim;
+	cumulatedDimension[mDimension - 1] = 1;
+	for (int i = mDimension - 2; i >= 0; i--) {
+		cumulatedDimension[i] = cumulatedDimension[i + 1] * shape(i + 1);
 	}
 }

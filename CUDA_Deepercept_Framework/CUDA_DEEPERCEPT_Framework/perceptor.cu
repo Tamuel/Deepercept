@@ -1,5 +1,7 @@
 #include "perceptor.h"
 #include "srcMeasure.h"
+#include <curand.h>
+#include <curand_kernel.h>
 
 bool Perceptor::gpuUtilization[] = { 0 };
 
@@ -44,15 +46,19 @@ void Perceptor::getGpuInformation() {
 			break;
 		}
 
+		size_t total_size, free_size;
+
 		printf("Device Number : %d\n", i);
 		printf("\tDevice Name : %s [%s]\n", prop.name, archName.c_str());
 		printf("\tCompute Capability : %d.%d\n", prop.major, prop.minor);
-		printf("\tGPU Clock Rate (GHz) : %f\n", float(prop.clockRate) / (1000.0 * 1000.0));
-		printf("\tMemory Clock Rate (GHz) : %f\n", float(prop.memoryClockRate) / (1000.0 * 1000.0));
-		printf("\tMemory Size (GB) : %f\n", static_cast<float>(prop.totalGlobalMem) / (1024 * 1024 * 1024));
+		printf("\tGPU Clock Rate (GHz) : %.2f\n", float(prop.clockRate) / (1000.0 * 1000.0));
+		printf("\tMemory Clock Rate (GHz) : %.2f\n", float(prop.memoryClockRate) / (1000.0 * 1000.0));
+		printf("\tMemory Size (GB) : %.2f\n", double(static_cast<long long>(prop.totalGlobalMem)) / (1024 * 1024 * 1024));
+		setDevice(i); cudaMemGetInfo(&free_size, &total_size);
+		printf("\tFree Memory Size (GB) : %.2f\n", double(static_cast<long long>(free_size)) / (1024 * 1024 * 1024));
 		printf("\tMemory Bus Width (bits) : %d\n", prop.memoryBusWidth);
-		printf("\tPeak Memory Bandwitdh (GB/s) : %f\n", 2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8.0) / 1.0e6);
-		printf("\tShared Memory per Blocks (KB) : %f\n", prop.sharedMemPerBlock);
+		printf("\tPeak Memory Bandwitdh (GB/s) : %.2f\n", 2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8.0) / 1.0e6);
+		printf("\tShared Memory per Blocks (KB) : %.2f\n", double(static_cast<long long>(prop.sharedMemPerBlock)) / 1024);
 		printf("\tNumber of Multi Processor : %d\n", prop.multiProcessorCount);
 		printf("\tNumber of Cuda Cores : %d\n", cores);
 		printf("\tMax Grid Size : [%d, %d, %d]\n", prop.maxGridSize[0], prop.maxGridSize[1], prop.maxGridSize[2]);
@@ -60,6 +66,7 @@ void Perceptor::getGpuInformation() {
 		printf("\tMax Threads Per Block : %d\n", prop.maxThreadsPerBlock);
 		printf("\tMax Threads Per Multi Processor : %d\n", prop.maxThreadsPerMultiProcessor);
 	}
+	setDevice();
 }
 
 void Perceptor::getCuDnnVersion() {
@@ -108,14 +115,14 @@ void Perceptor::checkDevice(Tensor* tA) {
 // Output is tensor pointer of result
 Tensor* Perceptor::matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta) {
 	checkDevice(tA, tB);
-	if (tA->shape()[1] != tB->shape()[0]) {
+	if (tA->col() != tB->row()) {
 		cout << "Cannot multiply " << tA->name() << " and " << tB->name() << endl;
 		cout << "Number of " << tA->name() << " columns and number of " << tB->name() << " rows are different" << endl;
 		exit(EXIT_FAILURE);
 	}
 
 	// Allocate result tensor
-	Tensor* t_out = new Tensor({ tA->row(), tB->col() }, false);
+	Tensor* t_out = new Tensor({ tA->col(), tB->row() }, false);
 	t_out->setDevice(deviceId());
 	sendToDevice(t_out);
 
@@ -126,17 +133,17 @@ Tensor* Perceptor::matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta) {
 		sendToDevice(tB);
 
 	// cublasSgemm : C = alpha * (OP(A) * OP(B)) + beta * C
-	// With row major!
+	// With column major!
 	CuBLAS_ERROR(
 		cublasSgemm(
-			cuBlasHandle,
-			CUBLAS_OP_N, CUBLAS_OP_N,
-			tB->col(), tA->row(), tA->col(), // Rows of OP(A), Columns of OP(B), Rows of C
+			cuBlasHandle, // Handle
+			CUBLAS_OP_N, CUBLAS_OP_N, // Trans A, Trans B
+			tA->row(), tB->col(), tA->col(), // Rows of OP(A), Columns of OP(B), Rows of C
 			&alpha, // alpha
-			tB->devDataPtr(), tB->col(), // A, leading dimension of A used to store the matrix A
-			tA->devDataPtr(), tA->col(), // B, leading dimension of B used to store the matrix B
+			tA->devDataPtr(), tA->row(), // A, leading dimension of A used to store the matrix A
+			tB->devDataPtr(), tB->row(), // B, leading dimension of B used to store the matrix B
 			&beta, // beta
-			t_out->devDataPtr(), tB->col() // C, leading dimension of C
+			t_out->devDataPtr(), tA->row() // C, leading dimension of C
 		)
 	);
 	syncGpuStream();
@@ -164,14 +171,14 @@ void Perceptor::matSgemm(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, floa
 	// With row major!
 	CuBLAS_ERROR(
 		cublasSgemm(
-			cuBlasHandle,
-			CUBLAS_OP_N, CUBLAS_OP_N,
-			tB->col(), tA->row(), tA->col(), // Rows of OP(A), Columns of OP(B), Rows of C
+			cuBlasHandle, // Handle
+			CUBLAS_OP_N, CUBLAS_OP_N, // Trans A, Trans B
+			tA->row(), tB->col(), tA->col(), // Rows of OP(A), Columns of OP(B), Rows of C
 			&alpha, // alpha
-			tB->devDataPtr(), tB->col(), // A, leading dimension of A used to store the matrix A
-			tA->devDataPtr(), tA->col(), // B, leading dimension of B used to store the matrix B
+			tA->devDataPtr(), tA->row(), // A, leading dimension of A used to store the matrix A
+			tB->devDataPtr(), tB->row(), // B, leading dimension of B used to store the matrix B
 			&beta, // beta
-			tOut->devDataPtr(), tB->col() // C, leading dimension of C
+			tOut->devDataPtr(), tA->row() // C, leading dimension of C
 		)
 	);
 	syncGpuStream();
@@ -188,7 +195,7 @@ void Perceptor::matMult(Tensor* tOut, Tensor* tA, Tensor* tB) {
 void Perceptor::matMult(dtype scalA, Tensor* tB) {
 	checkDevice(tB);
 	// Allocate result tensor
-	Tensor* t_out = new Tensor({ tB->row(), tB->col() }, false);
+	Tensor* t_out = new Tensor({ tB->col(), tB->row() }, false);
 	t_out->setDevice(deviceId());
 	sendToDevice(t_out);
 
@@ -216,7 +223,7 @@ Tensor* Perceptor::matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta) {
 	}
 
 	// Allocate result tensor
-	Tensor* t_out = new Tensor({ tA->row(), tB->col() }, false);
+	Tensor* t_out = new Tensor({ tA->col(), tA->row() }, false);
 	t_out->setDevice(deviceId());
 	sendToDevice(t_out);
 
@@ -228,14 +235,14 @@ Tensor* Perceptor::matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta) {
 
 	CuBLAS_ERROR(
 		cublasSgeam(
-			cuBlasHandle,
-			CUBLAS_OP_N, CUBLAS_OP_N,
-			tB->col(), tA->row(),
-			&alpha,
-			tB->devDataPtr(), tB->col(),
-			&beta,
-			tA->devDataPtr(), tA->col(),
-			t_out->devDataPtr(), tB->col()
+			cuBlasHandle, // Handle
+			CUBLAS_OP_N, CUBLAS_OP_N, // Trans A, Trans B
+			tA->col(), tA->row(), // m, n
+			&alpha, // Alpha
+			tA->devDataPtr(), tA->col(), // float *A, lda
+			&beta, // Beta
+			tB->devDataPtr(), tB->col(), // float *B, ldb
+			t_out->devDataPtr(), tA->col() // float *C, ldc
 		)
 	);
 	syncGpuStream();
@@ -263,14 +270,14 @@ void Perceptor::matSgeam(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, floa
 	// With row major!
 	CuBLAS_ERROR(
 		cublasSgeam(
-			cuBlasHandle,
-			CUBLAS_OP_N, CUBLAS_OP_N,
-			tB->col(), tA->row(),
-			&alpha,
-			tB->devDataPtr(), tB->col(),
-			&beta,
-			tA->devDataPtr(), tA->col(),
-			tOut->devDataPtr(), tB->col()
+			cuBlasHandle, // Handle
+			CUBLAS_OP_N, CUBLAS_OP_N, // Trans A, Trans B
+			tA->col(), tA->row(), // m, n
+			&alpha, // Alpha
+			tA->devDataPtr(), tA->col(), // float *A, lda
+			&beta, // Beta
+			tB->devDataPtr(), tB->col(), // float *B, ldb
+			tOut->devDataPtr(), tA->col() // float *C, ldc
 		)
 	);
 	syncGpuStream();
@@ -297,7 +304,7 @@ __global__ void cuEltwiseMultiplication(dtype* tOut, dtype* tA, dtype* tB, int r
 	int x = blockIdx.x * BLOCK_DIM + threadIdx.x;
 
 	if (y < row && x < col)
-		tOut[y * col + x] = tA[y * col + x] * tB[y * col + x];
+		tOut[y + x * row] = tA[y + x * row] * tB[y + x * row];
 }
 
 // Return = tA * tB (Haramard Product)
@@ -309,7 +316,7 @@ Tensor* Perceptor::matEltMult(Tensor* tA, Tensor* tB) {
 	}
 
 	// Allocate result tensor
-	Tensor* t_out = new Tensor({ tA->row(), tA->col() }, false);
+	Tensor* t_out = new Tensor({ tA->col(), tA->row() }, false);
 	sendToDevice(t_out);
 
 	// Allocate to device
@@ -482,7 +489,7 @@ __global__ void cuMatrixCopy(const dtype* src, dtype* dst, int src_row, int src_
 	int y = blockIdx.y * BLOCK_DIM + threadIdx.y;
 	int x = blockIdx.x * BLOCK_DIM + threadIdx.x;
 	if (y < dst_row && x < dst_col && y < src_row && x < src_col)
-		dst[y * dst_col + x] = src[y * src_col + x];
+		dst[y + x * dst_row] = src[y + x * src_row];
 }
 
 __global__ void iptransposeCoalesced(dtype* src_data, dtype* dummy_data, int src_row, int src_col, int dummy_row, int dummy_col)
@@ -498,28 +505,28 @@ __global__ void iptransposeCoalesced(dtype* src_data, dtype* dummy_data, int src
 		int dy = blockIdx.x * BLOCK_DIM + threadIdx.y;
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if(y + j < src_row && x < src_col)
-				tile_s[threadIdx.y + j][threadIdx.x] = src_data[(y + j) * src_col + x];
+				tile_s[threadIdx.y + j][threadIdx.x] = src_data[(y + j) + x * src_row];
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if (dy + j < src_row && dx < src_col)
-				tile_d[threadIdx.y + j][threadIdx.x] = src_data[(dy + j) * src_col + dx];
+				tile_d[threadIdx.y + j][threadIdx.x] = src_data[(dy + j) + dx * src_row];
 
 		__syncthreads();
 
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
-			dummy_data[(dy + j) * dummy_col + dx] = tile_s[threadIdx.x][threadIdx.y + j];
+			dummy_data[(dy + j) + dx * dummy_row] = tile_s[threadIdx.x][threadIdx.y + j];
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
-			dummy_data[(y + j) * dummy_col + x] = tile_d[threadIdx.x][threadIdx.y + j];
+			dummy_data[(y + j) + x * dummy_row] = tile_d[threadIdx.x][threadIdx.y + j];
 	}
 
 	else if (blockIdx.y == blockIdx.x) { // handle on-diagonal case
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if (y + j < src_row && x < src_col)
-				tile_s[threadIdx.y + j][threadIdx.x] = src_data[(y + j)*src_col + x];
+				tile_s[threadIdx.y + j][threadIdx.x] = src_data[(y + j) + x * src_row];
 
 		__syncthreads();
 
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
-			dummy_data[(y + j) * dummy_col + x] = tile_s[threadIdx.x][threadIdx.y + j];
+			dummy_data[(y + j) + x * dummy_row] = tile_s[threadIdx.x][threadIdx.y + j];
 	}
 }
 
@@ -536,31 +543,31 @@ __global__ void iptransposeCoalesced(dtype* src_data, int src_row, int src_col)
 		int dy = blockIdx.x * BLOCK_DIM + threadIdx.y;
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if (y + j < src_row && x < src_col)
-				tile_s[threadIdx.y + j][threadIdx.x] = src_data[(y + j) * src_col + x];
+				tile_s[threadIdx.y + j][threadIdx.x] = src_data[(y + j) + x * src_row];
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if (dy + j < src_row && dx < src_col)
-				tile_d[threadIdx.y + j][threadIdx.x] = src_data[(dy + j) * src_col + dx];
+				tile_d[threadIdx.y + j][threadIdx.x] = src_data[(dy + j) + dx * src_row];
 
 		__syncthreads();
 
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if (dy + j < src_row && dx < src_col)
-				src_data[(dy + j) * src_col + dx] = tile_s[threadIdx.x][threadIdx.y + j];
+				src_data[(dy + j) + dx * src_row] = tile_s[threadIdx.x][threadIdx.y + j];
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if (y + j < src_row && x < src_col)
-				src_data[(y + j) * src_col + x] = tile_d[threadIdx.x][threadIdx.y + j];
+				src_data[(y + j) + x * src_row] = tile_d[threadIdx.x][threadIdx.y + j];
 	}
 
 	else if (blockIdx.y == blockIdx.x) { // handle on-diagonal case
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if (y + j < src_row && x < src_col)
-				tile_s[threadIdx.y + j][threadIdx.x] = src_data[(y + j)*src_col + x];
+				tile_s[threadIdx.y + j][threadIdx.x] = src_data[(y + j) + x * src_row];
 
 		__syncthreads();
 
 		for (int j = 0; j < BLOCK_DIM; j += VECTOR_SIZE)
 			if (y + j < src_row && x < src_col)
-				src_data[(y + j) * src_col + x] = tile_s[threadIdx.x][threadIdx.y + j];
+				src_data[(y + j) + x * src_row] = tile_s[threadIdx.x][threadIdx.y + j];
 	}
 }
 
@@ -598,6 +605,39 @@ void Perceptor::matTranspose(Tensor* tA) {
 
 	syncGpuStream();
 	tA->swapDimension(0, 1);
+}
+
+/* this GPU kernel function is used to initialize the random states */
+__global__ void init_rand(unsigned int seed, curandState_t* states) {
+
+	/* we have to initialize the state */
+	curand_init(seed, /* the seed can be the same for each core, here we pass the time in from the CPU */
+		blockIdx.x, /* the sequence number should be different for each core (unless you want all
+					cores to get the same sequence of numbers for some reason - use thread id! */
+		0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
+		&states[blockIdx.x]);
+}
+
+/* this GPU kernel takes an array of states, and an array of ints, and puts a random int into each */
+__global__ void randoms(curandState_t* states, dtype* data, dtype min, dtype max) {
+	/* curand works like rand - except that it takes a state as a parameter */
+	
+	data[blockIdx.x] = (dtype(curand(&states[blockIdx.x])) / dtype(UINT32_MAX)) * (max - min) + min;
+}
+
+
+void Perceptor::matRand(Tensor* tA, dtype min, dtype max) {
+	checkDevice(tA);
+	if (!tA->haveDevicePtr())
+		sendToDevice(tA);
+
+	curandState_t* states;
+	cudaMalloc((void**)&states, tA->size() * sizeof(curandState_t));
+	init_rand << <tA->size(), 1 >> > (time(0), states);
+	randoms << <tA->size(), 1 >> > (states, tA->devDataPtr(), min, max);
+
+	cudaFree(states);
+	syncGpuStream();
 }
 
 
@@ -668,4 +708,10 @@ void Perceptor::retrievDataFromDevice(Tensor* t, bool retreiveOnlyData) {
 			temp.setName("");
 		}
 	}
+}
+
+Perceptor* Perceptor::convolution(Tensor* tInput, Tensor* tFilter, Tensor* tOutput) {
+
+
+	return this;
 }
