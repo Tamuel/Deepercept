@@ -1,6 +1,7 @@
 #ifndef TENSOR_H
 #define TENSOR_H
 #include "base.h"
+#include <cudnn.h>
 
 #if defined(NDEBUG) // If release mode
 #define CUDA_CHECK(x) (x)
@@ -26,6 +27,8 @@
 enum tensorIndex {COL, ROW};
 
 enum tensorDataType {FLOAT32, FLOAT64, INT32, INT64, BOOL};
+
+enum tensorType {TENSOR, FILTER, CONV, ACTIVATION, POOLING, OP, REDUCE_TENSOR, CTC_LOSS, RNN, DROPOUT};
 
 // Tensor class which is first class for data flow of deep learning framework
 // With column major
@@ -70,7 +73,7 @@ private:
 	// Is this tensor have device pointer for data
 	bool mHaveDevDataPtr;
 
-	// Device ID for where this tensor will be allocated
+	// Device ID for where this tensor be allocated
 	int mDeviceId;
 
 	// Pointer of this tensor in device
@@ -84,6 +87,9 @@ private:
 
 	// Pointer of this tensor data in device
 	int* devCumulatedDimension;
+
+	// Tensor descriptor for cuDNN
+	cudnnTensorDescriptor_t tDesc;
 
 	// Return real position of data with one dimenstional array
 	template<typename... Args>
@@ -126,6 +132,16 @@ private:
 
 	void setShape(const initializer_list<int>& aShape);
 
+	void createTensorDescriptor() {
+		cudnnCreateTensorDescriptor(&tDesc);
+		cudnnSetTensor4dDescriptor(
+			tDesc,
+			CUDNN_TENSOR_NCHW,
+			CUDNN_DATA_FLOAT,
+			n(), c(), h(), w()
+		);
+	}
+
 public:
 	// Tensor data with dtype
 	dtype* data;
@@ -133,10 +149,10 @@ public:
 	Tensor() : isContainer(true) {}
 
 	/*
-
 	Tensor really consist of one dimensional data,
 	But it act like tensor with shape.
 	Tensor data is initialized to 0.
+	If dimension of tensor is 4 then it generate tensor descriptor for cuDNN with NCHW format
 	*/
 	Tensor(const initializer_list<int>& aShape, string aName = "Tensor" + to_string(num),
 		dtype aInitValue = 0.0, bool toInitValue = true) : mSize(1), mDeviceId(0) {
@@ -145,6 +161,7 @@ public:
 		setShape(aShape);
 		setCumulatedDimension();
 		allocateData(aInitValue, toInitValue);
+		if(mDimension == 4) createTensorDescriptor();
 	}
 
 	Tensor(const initializer_list<int>& aShape, dtype aInitValue) :
@@ -219,11 +236,55 @@ public:
 	}
 
 	const int row() {
-		return shape()[ROW];
+		if (mDimension - 2 < 0) {
+			cout << "Cannot access row with " << mDimension << "-dimension tensor" << endl;
+			exit(EXIT_FAILURE);
+		}
+		return shape(ROW + mDimension - 2);
 	}
 
 	const int col() {
-		return shape()[COL];
+		if (mDimension - 2 < 0) {
+			cout << "Cannot access col with " << mDimension << "-dimension tensor" << endl;
+			exit(EXIT_FAILURE);
+		}
+		return shape(COL + mDimension - 2);
+	}
+
+	// Get number of images when this tensor format is NCHW
+	const int n() {
+		if (mDimension < 4) {
+			cout << "Cannot access n with " << mDimension << "-dimension tensor" << endl;
+			exit(EXIT_FAILURE);
+		}
+		return shape(mDimension - 4);
+	}
+
+	// Get number of channel when this tensor format is NCHW
+	const int c() {
+		if (mDimension < 3) {
+			cout << "Cannot access n with " << mDimension << "-dimension tensor" << endl;
+			exit(EXIT_FAILURE);
+		}
+		return shape(mDimension - 3);
+	}
+
+	// Get height when this tensor format is NCHW
+	const int h() {
+		if (mDimension < 2) {
+			cout << "Cannot access n with " << mDimension << "-dimension tensor" << endl;
+			exit(EXIT_FAILURE);
+		}
+		return shape(mDimension - 2);
+	}
+
+	// Get width when this tensor format is NCHW
+	const int w() {
+		if (mDimension < 1) {
+			cout << "Cannot access n with " << mDimension << "-dimension tensor" << endl;
+			exit(EXIT_FAILURE);
+		}
+		return shape(mDimension - 1);
 	}
 
 	const bool haveDevicePtr() {
@@ -301,21 +362,14 @@ public:
 	int deviceId() {
 		return mDeviceId;
 	}
-
-	//// Allocate this tensor to device and return device pointer of allocated tensor
-	//void sendToDevice(bool sendData = true);
-
-	//// Allocate data to device and return device pointer of allocated data
-	//void sendDataToDevice();
-
-	//// Retrieve data from tensor device pointer
-	//void retrievDataFromDevice(bool retreiveOnlyData = true);
 	
 	// Show tensor data, if you want to see current data in device you need to retreive data first (retrieveDataFromDevice)
-	void print(bool NHWC = false, int floatLength = 9, int floatPrecision = 3, int floor = -4);
+	// Shape printed reversely for natural perceive (WHCN)
+	void printTensor(int floatLength = 9, int floatPrecision = 3, int floor = -4);
 
 	// Show tensor data, if you want to see current data in device you need to retreive data first (retrieveDataFromDevice)
-	void print2() {
+	// Shape printed reversely for natural perceive (WHCN)
+	void printData() {
 		cout << name() << " ["; printShape(); cout << "]";
 		for (int i = 0; i < mSize; i++) {
 			cout << f_to_s(data[i]) << "  ";
@@ -325,6 +379,7 @@ public:
 		cout << endl;
 	}
 
+	// Shape printed reversely for natural perceive (WHCN)
 	void printShape() {
 		for (int i = mDimension - 1; i >= 0; i--)
 			if(i != 0)

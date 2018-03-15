@@ -3,6 +3,7 @@
 #include <curand.h>
 #include <curand_kernel.h>
 
+
 bool Perceptor::gpuUtilization[] = { 0 };
 
 void Perceptor::getGpuInformation() {
@@ -54,7 +55,7 @@ void Perceptor::getGpuInformation() {
 		printf("\tGPU Clock Rate (GHz) : %.2f\n", float(prop.clockRate) / (1000.0 * 1000.0));
 		printf("\tMemory Clock Rate (GHz) : %.2f\n", float(prop.memoryClockRate) / (1000.0 * 1000.0));
 		printf("\tMemory Size (GB) : %.2f\n", double(static_cast<long long>(prop.totalGlobalMem)) / (1024 * 1024 * 1024));
-		setDevice(i); cudaMemGetInfo(&free_size, &total_size);
+		changeDevice(i); cudaMemGetInfo(&free_size, &total_size);
 		printf("\tFree Memory Size (GB) : %.2f\n", double(static_cast<long long>(free_size)) / (1024 * 1024 * 1024));
 		printf("\tMemory Bus Width (bits) : %d\n", prop.memoryBusWidth);
 		printf("\tPeak Memory Bandwitdh (GB/s) : %.2f\n", 2.0 * prop.memoryClockRate * (prop.memoryBusWidth / 8.0) / 1.0e6);
@@ -66,7 +67,7 @@ void Perceptor::getGpuInformation() {
 		printf("\tMax Threads Per Block : %d\n", prop.maxThreadsPerBlock);
 		printf("\tMax Threads Per Multi Processor : %d\n", prop.maxThreadsPerMultiProcessor);
 	}
-	setDevice();
+	changeDevice();
 }
 
 void Perceptor::getCuDnnVersion() {
@@ -84,53 +85,59 @@ void Perceptor::getGpuDriverVersion() {
 	cout << "GPU driver version : " << version << endl;
 }
 
-void Perceptor::checkDevice(Tensor* tA, Tensor* tB) {
-	checkDevice(tA);
-	checkDevice(tB);
-	if (tA->deviceId() != tB->deviceId()) {
-		cout << "Device of " << tA->name() << " = " << tA->deviceId() << 
-			" and device of " << tB->name() << " = " << tB->deviceId() << " are different" << endl;
-		exit(EXIT_FAILURE);
+void Perceptor::checkDeviceAndAllocate(Tensor* tA) {
+	if (!tA->haveDevicePtr() && !tA->haveDeviceDataPtr()) { // Tensor never allocated at device
+		changeDevice();
+		debugOut(tA->name() + " is allocated at Device " + to_string(deviceId()));
+		sendTensorToDevice(tA);
 	}
-	setDevice();
-}
-
-void Perceptor::checkDevice(Tensor* tA) {
-	if (!tA->haveDevicePtr() && !tA->haveDeviceDataPtr()) {
-		if (tA->deviceId() != deviceId()) {
-			cout << "Device of " << tA->name() << " = " << tA->deviceId() << " is automatically chanaged to " << deviceId()
-				 << " because " << tA->name() << " was not allocated at device" << endl;
-		}
-		tA->setDevice(deviceId());
-		setDevice();
-	}
-	else if (deviceId() != tA->deviceId()) {
+	else if (deviceId() != tA->deviceId()) {  // Tensor already allocated at device
 		cout << "Device of Perceptor = " << deviceId() <<
 			" and device of " << tA->name() << " = " << tA->deviceId() << " are different" << endl;
 		exit(EXIT_FAILURE);
 	}
 }
 
+tBlocks Perceptor::getThreadBlocks(Tensor* tA) {
+	tBlocks result;
+
+	int nColBlocks;
+	int nRowBlocks;
+	nRowBlocks = tA->row() % BLOCK_DIM == 0 ? tA->row() / BLOCK_DIM : tA->row() / BLOCK_DIM + 1;
+	nColBlocks = tA->col() % BLOCK_DIM == 0 ? tA->col() / BLOCK_DIM : tA->col() / BLOCK_DIM + 1;
+
+	result.threads.x = BLOCK_DIM;
+	result.threads.y = BLOCK_DIM;
+	result.threads.z = 1;
+
+	result.blocks.x = nColBlocks;
+	result.blocks.y = nRowBlocks;
+
+	return result;
+}
+
 // Input pointer of tensor A and B
 // Output is tensor pointer of result
 Tensor* Perceptor::matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta) {
-	checkDevice(tA, tB);
+	// Error check
 	if (tA->col() != tB->row()) {
 		cout << "Cannot multiply " << tA->name() << " and " << tB->name() << endl;
 		cout << "Number of " << tA->name() << " columns and number of " << tB->name() << " rows are different" << endl;
 		exit(EXIT_FAILURE);
 	}
 
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensors
+	checkDeviceAndAllocate(tA);
+	checkDeviceAndAllocate(tB);
+
 	// Allocate result tensor
 	Tensor* t_out = new Tensor({ tA->col(), tB->row() }, false);
-	t_out->setDevice(deviceId());
-	sendToDevice(t_out);
+	checkDeviceAndAllocate(t_out);
 
-	// Allocate to device
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+
 
 	// cublasSgemm : C = alpha * (OP(A) * OP(B)) + beta * C
 	// With column major!
@@ -152,20 +159,19 @@ Tensor* Perceptor::matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta) {
 }
 
 void Perceptor::matSgemm(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta) {
-	checkDevice(tOut, tA);
-	checkDevice(tA, tB);
-	if (tA->shape()[1] != tB->shape()[0]) {
+	// Check error
+	if (tA->col() != tB->row()) {
 		cout << "Cannot multiply " << tA->name() << " and " << tB->name() << endl;
 		exit(EXIT_FAILURE);
 	}
 
-	// Allocate to device
-	if (!tOut->haveDevicePtr())
-		sendToDevice(tOut);
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensors
+	checkDeviceAndAllocate(tOut);
+	checkDeviceAndAllocate(tA);
+	checkDeviceAndAllocate(tB);
 
 	// cublasSgemm : C = alpha * (OP(A) * OP(B)) + beta * C
 	// With row major!
@@ -193,14 +199,15 @@ void Perceptor::matMult(Tensor* tOut, Tensor* tA, Tensor* tB) {
 }
 
 void Perceptor::matMult(dtype scalA, Tensor* tB) {
-	checkDevice(tB);
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensor
+	checkDeviceAndAllocate(tB);
+
 	// Allocate result tensor
 	Tensor* t_out = new Tensor({ tB->col(), tB->row() }, false);
-	t_out->setDevice(deviceId());
-	sendToDevice(t_out);
-
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+	checkDeviceAndAllocate(t_out);
 
 	CuBLAS_ERROR(
 		cublasSscal(
@@ -216,22 +223,22 @@ void Perceptor::matMult(dtype scalA, Tensor* tB) {
 }
 
 Tensor* Perceptor::matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta) {
-	checkDevice(tA, tB);
+	// Check error
 	if (!tA->isSame(*tB)) {
 		cout << "Cannot sum " << tA->name() << " and " << tB->name() << endl;
 		exit(EXIT_FAILURE);
 	}
 
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensors
+	checkDeviceAndAllocate(tA);
+	checkDeviceAndAllocate(tB);
+
 	// Allocate result tensor
 	Tensor* t_out = new Tensor({ tA->col(), tA->row() }, false);
-	t_out->setDevice(deviceId());
-	sendToDevice(t_out);
-
-	// Allocate to device
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+	checkDeviceAndAllocate(t_out);
 
 	CuBLAS_ERROR(
 		cublasSgeam(
@@ -251,20 +258,19 @@ Tensor* Perceptor::matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta) {
 }
 
 void Perceptor::matSgeam(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta) {
-	checkDevice(tOut, tA);
-	checkDevice(tA, tB);
+	// Check error
 	if (!tA->isSame(*tB)) {
 		cout << "Cannot sum " << tA->name() << " and " << tB->name() << endl;
 		exit(EXIT_FAILURE);
 	}
 
-	// Allocate to device
-	if (!tOut->haveDevicePtr())
-		sendToDevice(tOut);
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensors
+	checkDeviceAndAllocate(tOut);
+	checkDeviceAndAllocate(tA);
+	checkDeviceAndAllocate(tB);
 
 	// cublasSgemm : C = alpha * (OP(A) * OP(B)) + beta * C
 	// With row major!
@@ -292,11 +298,11 @@ void Perceptor::matAdd(Tensor* tOut, Tensor* tA, Tensor* tB) {
 }
 
 Tensor* Perceptor::matSub(Tensor* tA, Tensor* tB) {
-	return matSgeam(tA, tB, -1, 1);
+	return matSgeam(tA, tB, 1, -1);
 }
 
 void Perceptor::matSub(Tensor* tOut, Tensor* tA, Tensor* tB) {
-	matSgeam(tOut, tA, tB, -1, 1);
+	matSgeam(tOut, tA, tB, 1, -1);
 }
 
 __global__ void cuEltwiseMultiplication(dtype* tOut, dtype* tA, dtype* tB, int row, int col) {
@@ -309,67 +315,53 @@ __global__ void cuEltwiseMultiplication(dtype* tOut, dtype* tA, dtype* tB, int r
 
 // Return = tA * tB (Haramard Product)
 Tensor* Perceptor::matEltMult(Tensor* tA, Tensor* tB) {
-	checkDevice(tA, tB);
+	// Check error
 	if (!tA->isSame(*tB)) {
 		cout << "Cannot element wise multiplication with " << tA->name() << " and " << tB->name() << ", their shape is different" << endl;
 		exit(EXIT_FAILURE);
 	}
 
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensors
+	checkDeviceAndAllocate(tA);
+	checkDeviceAndAllocate(tB);
+
 	// Allocate result tensor
 	Tensor* t_out = new Tensor({ tA->col(), tA->row() }, false);
-	sendToDevice(t_out);
+	checkDeviceAndAllocate(t_out);
 
-	// Allocate to device
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+	tBlocks bl = getThreadBlocks(tA);
 
-	int nBblocks;
-	if (tA->row() >= tA->col())
-		nBblocks = tA->row() % BLOCK_DIM == 0 ? tA->row() / BLOCK_DIM : tA->row() / BLOCK_DIM + 1;
-	else
-		nBblocks = tA->col() % BLOCK_DIM == 0 ? tA->col() / BLOCK_DIM : tA->col() / BLOCK_DIM + 1;
-
-	dim3 threads(BLOCK_DIM, BLOCK_DIM);
-	dim3 blocks(nBblocks, nBblocks);
-
-	cuEltwiseMultiplication <<<blocks, threads >>> (t_out->devDataPtr(), tA->devDataPtr(), tB->devDataPtr(), tA->row(), tA->col());
+	cuEltwiseMultiplication <<<bl.blocks, bl.threads>>> (t_out->devDataPtr(), tA->devDataPtr(), tB->devDataPtr(), tA->row(), tA->col());
 	syncGpuStream();
 }
 
 // tOut = tA * tB (Haramard Product)
 void Perceptor::matEltMult(Tensor* tOut, Tensor* tA, Tensor* tB) {
-	checkDevice(tOut, tA);
-	checkDevice(tA, tB);
+	// Check error
 	if (!tA->isSame(*tB)) {
 		cout << "Cannot element wise multiplication with " << tA->name() << " and " << tB->name() << ", their shape is different" << endl;
 		exit(EXIT_FAILURE);
 	}
 
-	// Allocate to device
-	if (!tOut->haveDevicePtr())
-		sendToDevice(tOut);
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+	// Change device for current perceptor
+	changeDevice();
 
-	int nBblocks;
-	if (tA->row() >= tA->col())
-		nBblocks = tA->row() % BLOCK_DIM == 0 ? tA->row() / BLOCK_DIM : tA->row() / BLOCK_DIM + 1;
-	else
-		nBblocks = tA->col() % BLOCK_DIM == 0 ? tA->col() / BLOCK_DIM : tA->col() / BLOCK_DIM + 1;
+	// Check device state of input tensors
+	checkDeviceAndAllocate(tOut);
+	checkDeviceAndAllocate(tA);
+	checkDeviceAndAllocate(tB);
 
-	dim3 threads(BLOCK_DIM, BLOCK_DIM);
-	dim3 blocks(nBblocks, nBblocks);
+	tBlocks bl = getThreadBlocks(tA);
 
-	cuEltwiseMultiplication << <blocks, threads >> > (tOut->devDataPtr(), tA->devDataPtr(), tB->devDataPtr(), tA->row(), tA->col());
+	cuEltwiseMultiplication << <bl.blocks, bl.threads >> > (tOut->devDataPtr(), tA->devDataPtr(), tB->devDataPtr(), tA->row(), tA->col());
 	syncGpuStream();
 }
 
 void Perceptor::matSwap(Tensor* tA, Tensor* tB, bool forceSwap) {
-	checkDevice(tA, tB);
+	// Check error
 	if (!forceSwap && !tA->isSame(*tB)) {
 		cout << tA->name() << " and " << tB->name() << " tensors shapes are different!" << endl;
 		exit(EXIT_FAILURE);
@@ -379,10 +371,12 @@ void Perceptor::matSwap(Tensor* tA, Tensor* tB, bool forceSwap) {
 		exit(EXIT_FAILURE);
 	}
 
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensors
+	checkDeviceAndAllocate(tA);
+	checkDeviceAndAllocate(tB);
 
 	CuBLAS_ERROR(
 		cublasSswap(
@@ -398,16 +392,18 @@ void Perceptor::matSwap(Tensor* tA, Tensor* tB, bool forceSwap) {
 }
 
 void Perceptor::matCopy(Tensor* tB, Tensor* tA) {
-	checkDevice(tB, tA);
+	// Check error
 	if (!tA->isSame(*tB)) {
 		cout << tA->name() << " and " << tB->name() << " tensors shapes are different!" << endl;
 		exit(EXIT_FAILURE);
 	}
 
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
-	if (!tB->haveDevicePtr())
-		sendToDevice(tB);
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensors
+	checkDeviceAndAllocate(tA);
+	checkDeviceAndAllocate(tB);
 
 	CuBLAS_ERROR(
 		cublasScopy(
@@ -423,11 +419,13 @@ void Perceptor::matCopy(Tensor* tB, Tensor* tA) {
 }
 
 int Perceptor::matMaxIndex(Tensor* tA) {
-	checkDevice(tA);
-	int result = 0;
+	// Change device for current perceptor
+	changeDevice();
 
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
+	// Check device state of input tensor
+	checkDeviceAndAllocate(tA);
+
+	int result = 0;
 
 	CuBLAS_ERROR(
 		cublasIsamax(
@@ -444,11 +442,13 @@ int Perceptor::matMaxIndex(Tensor* tA) {
 }
 
 int Perceptor::matMinIndex(Tensor* tA) {
-	checkDevice(tA);
-	int result = 0;
+	// Change device for current perceptor
+	changeDevice();
 
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
+	// Check device state of input tensor
+	checkDeviceAndAllocate(tA);
+
+	int result = 0;
 
 	CuBLAS_ERROR(
 		cublasIsamin(
@@ -465,11 +465,13 @@ int Perceptor::matMinIndex(Tensor* tA) {
 }
 
 dtype Perceptor::matSum(Tensor* tA) {
-	checkDevice(tA);
-	dtype result = 0;
+	// Change device for current perceptor
+	changeDevice();
 
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
+	// Check device state of input tensor
+	checkDeviceAndAllocate(tA);
+
+	dtype result = 0;
 
 	CuBLAS_ERROR(
 		cublasSasum(
@@ -572,34 +574,30 @@ __global__ void iptransposeCoalesced(dtype* src_data, int src_row, int src_col)
 }
 
 void Perceptor::matTranspose(Tensor* tA) {
-	checkDevice(tA);
+	// Check error
 	if (tA->dimension() != 2) {
 		cout << "Cannot transpose matrix. " << tA->name() << " is " << tA->dimension() << " dimension matrix." << endl;
 		exit(EXIT_FAILURE);
 	}
 
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
+	// Change device for current perceptor
+	changeDevice();
 
-	int nBblocks;
-	if (tA->row() >= tA->col())
-		nBblocks = tA->row() % BLOCK_DIM == 0 ? tA->row() / BLOCK_DIM : tA->row() / BLOCK_DIM + 1;
-	else
-		nBblocks = tA->col() % BLOCK_DIM == 0 ? tA->col() / BLOCK_DIM : tA->col() / BLOCK_DIM + 1;
+	// Check device state of input tensor
+	checkDeviceAndAllocate(tA);
 
+	tBlocks bl = getThreadBlocks(tA);
 	dim3 threads(BLOCK_DIM, VECTOR_SIZE);
-	dim3 threads2(BLOCK_DIM, BLOCK_DIM);
-	dim3 blocks(nBblocks, nBblocks);
 
 	if (tA->shape(0) == tA->shape(1)) {
-		iptransposeCoalesced <<< blocks, threads >>> (tA->devDataPtr(), tA->col(), tA->row());
+		iptransposeCoalesced <<< bl.blocks, threads >>> (tA->devDataPtr(), tA->col(), tA->row());
 	}
 	else {
-		iptransposeCoalesced <<< blocks, threads >>>
+		iptransposeCoalesced <<< bl.blocks, threads >>>
 			(tA->devDataPtr(), dummyTensor->devDataPtr(), tA->row(), tA->col(), MATRIX_DIM_LIMIT, MATRIX_DIM_LIMIT);
 		syncGpuStream();
 
-		cuMatrixCopy <<< blocks, threads2 >>>
+		cuMatrixCopy <<< bl.blocks, bl.threads >>>
 			(dummyTensor->devDataPtr(), tA->devDataPtr(), MATRIX_DIM_LIMIT, MATRIX_DIM_LIMIT, tA->col(), tA->row());
 	}
 
@@ -627,9 +625,11 @@ __global__ void randoms(curandState_t* states, dtype* data, dtype min, dtype max
 
 
 void Perceptor::matRand(Tensor* tA, dtype min, dtype max) {
-	checkDevice(tA);
-	if (!tA->haveDevicePtr())
-		sendToDevice(tA);
+	// Change device for current perceptor
+	changeDevice();
+
+	// Check device state of input tensor
+	checkDeviceAndAllocate(tA);
 
 	curandState_t* states;
 	cudaMalloc((void**)&states, tA->size() * sizeof(curandState_t));
@@ -641,10 +641,11 @@ void Perceptor::matRand(Tensor* tA, dtype min, dtype max) {
 }
 
 
-void Perceptor::sendToDevice(Tensor* t, bool sendData) {
+void Perceptor::sendTensorToDevice(Tensor* t, bool sendData) {
+	changeDevice();
+
 	Tensor* devPtr = 0;
 	t->setDevice(deviceId());
-	cudaSetDevice(deviceId());
 	CUDA_CHECK(cudaMalloc((void**)&devPtr, sizeof(Tensor)));
 	CUDA_CHECK(cudaMemcpy(devPtr, t, sizeof(Tensor), cudaMemcpyHostToDevice));
 
@@ -676,14 +677,14 @@ void Perceptor::sendToDevice(Tensor* t, bool sendData) {
 }
 
 void Perceptor::sendDataToDevice(Tensor* t) {
-	if (t->deviceId() != deviceId()) {
+	changeDevice();
+
+	if ((t->haveDevicePtr() || t->haveDeviceDataPtr()) && t->deviceId() != deviceId()) {
 		cout << t->name() << " and  perceptor device ID " << deviceId() << " are different" << endl;
 		exit(EXIT_FAILURE);
 	}
 	if (t->haveDevicePtr()) {
 		dtype* devPtr = 0;
-		t->setDevice(deviceId());
-		cudaSetDevice(deviceId());
 		cudaFree(t->devData);
 		CUDA_CHECK(cudaMalloc((void**)&devPtr, sizeof(dtype) * t->size()));
 		CUDA_CHECK(cudaMemcpy(devPtr, t->data, sizeof(dtype) * t->size(), cudaMemcpyHostToDevice));
@@ -697,8 +698,9 @@ void Perceptor::sendDataToDevice(Tensor* t) {
 }
 
 void Perceptor::retrievDataFromDevice(Tensor* t, bool retreiveOnlyData) {
+	changeDevice();
+
 	if (t->haveDevicePtr() && t->haveDeviceDataPtr()) {
-		cudaSetDevice(deviceId());
 		CUDA_CHECK(cudaMemcpy(t->data, t->devData, t->size() * sizeof(dtype), cudaMemcpyDeviceToHost));
 		if (!retreiveOnlyData) {
 			Tensor temp;
@@ -708,6 +710,34 @@ void Perceptor::retrievDataFromDevice(Tensor* t, bool retreiveOnlyData) {
 			temp.setName("");
 		}
 	}
+}
+
+void Perceptor::fill(Tensor* tA, dtype value) {
+	dtype v = value;
+	CuDNN_ERROR(
+		cudnnSetTensor(
+			cuDnnHandle,
+			tA->tDesc,
+			tA->devDataPtr(),
+			&v
+		)
+	);
+}
+
+void Perceptor::addBias(Tensor* tA, Tensor* bias, dtype alpha, dtype beta) {
+	dtype a = alpha;
+	dtype b = beta;
+	CuDNN_ERROR(
+		cudnnAddTensor(
+			cuDnnHandle,
+			&a,
+			bias->tDesc,
+			bias->devDataPtr(),
+			&b,
+			tA->tDesc,
+			tA->devDataPtr()
+		)
+	);
 }
 
 Perceptor* Perceptor::convolution(Tensor* tInput, Tensor* tFilter, Tensor* tOutput) {

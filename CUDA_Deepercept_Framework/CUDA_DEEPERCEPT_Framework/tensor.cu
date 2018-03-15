@@ -21,13 +21,19 @@ void Tensor::operator[](const initializer_list<dtype>& aData) {
 	}
 }
 
-void Tensor::print(bool NHWC, int floatLength, int floatPrecision, int floor) {
+void Tensor::printTensor(int floatLength, int floatPrecision, int floor) {
 	cout << "  " << mName << " [";
 	printShape();
 	cout << "]" << endl;
 	
 	int maximumWidth = floatLength + 2;
 	int indexWidth = floatLength;
+
+	string gap = " ";
+
+	// Actual output number of column and row
+	int P_COL, P_ROW;
+
 	switch (mDimension) {
 	case 1:
 		if (mSize <= maximumWidth) {
@@ -70,62 +76,80 @@ void Tensor::print(bool NHWC, int floatLength, int floatPrecision, int floor) {
 		break;
 
 	case 2:
+		if (col() > 10) P_COL = 10;
+		else P_COL = col();
+
+		if (row() > 10) P_ROW = 10;
+		else P_ROW = row();
+
 		// Print blank
 		cout << setw(indexWidth) << "";
 
 		// Print column index
-		for (int col = 0; col < shape(COL); col++) {
-			cout << setw(indexWidth) << right << ("[" + to_string(col) + "]");
+		for (int col = 0; col < P_COL; col++) {
+			cout << setw(indexWidth) << right << ("[" + to_string(col) + "]") << gap;
 		}
 		cout << endl;
 
 		// Print data
-		for (int row = 0; row < shape(ROW); row++) {
+		for (int row = 0; row < P_ROW; row++) {
 			cout << setw(indexWidth) << right << ("[" + to_string(row) + "]"); // Print row index
-			for (int col = 0; col < shape(COL); col++)
-				cout << setw(floatLength) << right << f_to_s((*this)(col, row), floatLength, floatPrecision, floor);
+			for (int col = 0; col < P_COL; col++)
+				cout << setw(floatLength) << right << f_to_s((*this)(col, row), floatLength, floatPrecision, floor) << gap;
 			cout << endl;
 		}
 		break;
 	case 3:
+		if (col() > 10) P_COL = 10;
+		else P_COL = col();
+
+		if (row() > 10) P_ROW = 10;
+		else P_ROW = row();
+
 		for (int z = 0; z < shape(0); z++) {
 			// Print blank
 			cout << setw(indexWidth) << ("[" + to_string(z) + "]");
 
 			// Print column index
-			for (int col = 0; col < shape(COL + 1); col++) {
-				cout << setw(indexWidth) << right << ("[" + to_string(col) + "]");
+			for (int col = 0; col < P_COL; col++) {
+				cout << setw(indexWidth) << right << ("[" + to_string(col) + "]") << gap;
 			}
 			cout << endl;
 
 			// Print data
-			for (int row = 0; row < shape(ROW + 1); row++) {
+			for (int row = 0; row < P_ROW; row++) {
 				cout << setw(indexWidth) << right << ("[" + to_string(row) + "]"); // Print row index
-				for (int col = 0; col < shape(COL + 1); col++)
-					cout << setw(floatLength) << right << f_to_s((*this)(z, col, row), floatLength, floatPrecision, floor);
+				for (int col = 0; col < P_COL; col++)
+					cout << setw(floatLength) << right << f_to_s((*this)(z, col, row), floatLength, floatPrecision, floor) << gap;
 				cout << endl;
 			}
 			
 			cout << endl;
 		}
 		break;
-	case 4:
+	case 4: // NCHW
+		if (col() > 10) P_COL = 10;
+		else P_COL = col();
+
+		if (row() > 10) P_ROW = 10;
+		else P_ROW = row();
+
 		for (int w = 0; w < shape(0); w++) {
 			for (int z = 0; z < shape(1); z++) {
 				// Print blank
 				cout << setw(indexWidth) << ("[" + to_string(w) + ", " + to_string(z) + "]");
 
 				// Print column index
-				for (int col = 0; col < shape(COL + 2); col++) {
-					cout << setw(indexWidth) << right << ("[" + to_string(col) + "]");
+				for (int col = 0; col < P_COL; col++) {
+					cout << setw(indexWidth) << right << ("[" + to_string(col) + "]") << gap;
 				}
 				cout << endl;
 
 				// Print data
-				for (int row = 0; row < shape(ROW + 2); row++) {
+				for (int row = 0; row < P_ROW; row++) {
 					cout << setw(indexWidth) << right << ("[" + to_string(row) + "]"); // Print row index
-					for (int col = 0; col < shape(COL + 2); col++)
-						cout << setw(floatLength) << right << f_to_s((*this)(w, z, col, row), floatLength, floatPrecision, floor);
+					for (int col = 0; col < P_COL; col++)
+						cout << setw(floatLength) << right << f_to_s((*this)(w, z, col, row), floatLength, floatPrecision, floor) << gap;
 					cout << endl;
 				}
 
@@ -135,69 +159,6 @@ void Tensor::print(bool NHWC, int floatLength, int floatPrecision, int floor) {
 		break;
 	}
 }
-
-//void Tensor::sendToDevice(bool sendData) {
-//	Tensor* devPtr = 0;
-//	cudaSetDevice(mDeviceId);
-//	CUDA_CHECK(cudaMalloc((void**)&devPtr, sizeof(Tensor)));
-//	CUDA_CHECK(cudaMemcpy(devPtr, this, sizeof(Tensor), cudaMemcpyHostToDevice));
-//
-//	int* hostShape;
-//	CUDA_CHECK(cudaMalloc((void**)&hostShape, sizeof(int) * this->dimension()));
-//	CUDA_CHECK(cudaMemcpy(hostShape, this->mShape, sizeof(int) * this->dimension(), cudaMemcpyHostToDevice));
-//	CUDA_CHECK(cudaMemcpy(&(devPtr->mShape), &hostShape, sizeof(int*), cudaMemcpyHostToDevice));
-//
-//	int* hostCumulatedDimension;
-//	CUDA_CHECK(cudaMalloc((void**)&hostCumulatedDimension, sizeof(int) * this->dimension()));
-//	CUDA_CHECK(cudaMemcpy(hostCumulatedDimension, this->cumulatedDimension, sizeof(int) * this->dimension(), cudaMemcpyHostToDevice));
-//	CUDA_CHECK(cudaMemcpy(&(devPtr->cumulatedDimension), &hostCumulatedDimension, sizeof(int*), cudaMemcpyHostToDevice));
-//	
-//	// Set device tensor as container
-//	CUDA_CHECK(cudaMemcpy(&devPtr->isContainer, new bool(true), sizeof(bool), cudaMemcpyHostToDevice));
-//
-//	// Copy host data to device
-//	dtype* hostData;
-//	CUDA_CHECK(cudaMalloc((void**)&hostData, sizeof(dtype) * this->size()));
-//	if (sendData)
-//		CUDA_CHECK(cudaMemcpy(hostData, this->data, sizeof(dtype) * this->size(), cudaMemcpyHostToDevice));
-//	CUDA_CHECK(cudaMemcpy(&(devPtr->data), &hostData, sizeof(dtype*), cudaMemcpyHostToDevice));
-//	devData = hostData;
-//	dev = devPtr;
-//	devShape = hostShape;
-//	devCumulatedDimension = hostCumulatedDimension;
-//	mHaveDevPtr = true;
-//	mHaveDevDataPtr = true;
-//}
-//
-//void Tensor::sendDataToDevice() {
-//	if (haveDevicePtr()) {
-//		dtype* devPtr = 0;
-//		cudaSetDevice(mDeviceId);
-//		cudaFree(devData);
-//		CUDA_CHECK(cudaMalloc((void**)&devPtr, sizeof(dtype) * size()));
-//		CUDA_CHECK(cudaMemcpy(devPtr, data, sizeof(dtype) * size(), cudaMemcpyHostToDevice));
-//		devData = devPtr;
-//		mHaveDevDataPtr = true;
-//	}
-//	else {
-//		cout << name() << " is not allocated at device" << endl;
-//		exit(EXIT_FAILURE);
-//	}
-//}
-//
-//void Tensor::retrievDataFromDevice(bool retreiveOnlyData) {
-//	if (haveDevicePtr() && haveDeviceDataPtr()) {
-//		cudaSetDevice(mDeviceId);
-//		CUDA_CHECK(cudaMemcpy(data, devData, this->size() * sizeof(dtype), cudaMemcpyDeviceToHost));
-//		if (!retreiveOnlyData) {
-//			Tensor temp;
-//			CUDA_CHECK(cudaMemcpy(&temp, dev, sizeof(Tensor), cudaMemcpyDeviceToHost));
-//			CUDA_CHECK(cudaMemcpy(cumulatedDimension, temp.cumulatedDimension, this->dimension() * sizeof(int), cudaMemcpyDeviceToHost));
-//			CUDA_CHECK(cudaMemcpy(mShape, temp.mShape, this->dimension() * sizeof(int), cudaMemcpyDeviceToHost));
-//			temp.setName("");
-//		}
-//	}
-//}
 
 bool Tensor::isSame(Tensor& other) {
 	for (int i = 0; i < mDimension; i++)
