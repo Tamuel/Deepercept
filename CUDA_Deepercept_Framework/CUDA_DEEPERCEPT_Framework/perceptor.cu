@@ -4,7 +4,7 @@
 #include <curand_kernel.h>
 
 
-bool Perceptor::gpuUtilization[] = { 0 };
+bool Perceptor::GPU_UTILIZATION[] = { 0 };
 
 void Perceptor::getGpuInformation() {
 	int nDevices;
@@ -76,7 +76,7 @@ void Perceptor::getCuDnnVersion() {
 
 void Perceptor::getCuBlasVersion() {
 	int version;
-	cublasGetVersion(cuBlasHandle, &version);
+	cublasGetVersion(mCublasHandle, &version);
 	cout << "cuBlas version : " << version << endl;
 }
 void Perceptor::getGpuDriverVersion() {
@@ -118,7 +118,7 @@ tBlocks Perceptor::getThreadBlocks(Tensor* tA) {
 
 // Input pointer of tensor A and B
 // Output is tensor pointer of result
-Tensor* Perceptor::matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta) {
+Tensor* Perceptor::matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta, cublasOperation_t transA, cublasOperation_t transB) {
 	// Error check
 	if (tA->col() != tB->row()) {
 		cout << "Cannot multiply " << tA->name() << " and " << tB->name() << endl;
@@ -143,8 +143,8 @@ Tensor* Perceptor::matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta) {
 	// With column major!
 	CuBLAS_ERROR(
 		cublasSgemm(
-			cuBlasHandle, // Handle
-			CUBLAS_OP_N, CUBLAS_OP_N, // Trans A, Trans B
+			mCublasHandle, // Handle
+			transA, transB, // Trans A, Trans B
 			tA->row(), tB->col(), tA->col(), // Rows of OP(A), Columns of OP(B), Rows of C
 			&alpha, // alpha
 			tA->devDataPtr(), tA->row(), // A, leading dimension of A used to store the matrix A
@@ -158,7 +158,7 @@ Tensor* Perceptor::matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta) {
 	return t_out;
 }
 
-void Perceptor::matSgemm(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta) {
+void Perceptor::matSgemm(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta, cublasOperation_t transA, cublasOperation_t transB) {
 	// Check error
 	if (tA->col() != tB->row()) {
 		cout << "Cannot multiply " << tA->name() << " and " << tB->name() << endl;
@@ -177,8 +177,8 @@ void Perceptor::matSgemm(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, floa
 	// With row major!
 	CuBLAS_ERROR(
 		cublasSgemm(
-			cuBlasHandle, // Handle
-			CUBLAS_OP_N, CUBLAS_OP_N, // Trans A, Trans B
+			mCublasHandle, // Handle
+			transA, transB, // Trans A, Trans B
 			tA->row(), tB->col(), tA->col(), // Rows of OP(A), Columns of OP(B), Rows of C
 			&alpha, // alpha
 			tA->devDataPtr(), tA->row(), // A, leading dimension of A used to store the matrix A
@@ -211,7 +211,7 @@ void Perceptor::matMult(dtype scalA, Tensor* tB) {
 
 	CuBLAS_ERROR(
 		cublasSscal(
-			cuBlasHandle,
+			mCublasHandle,
 			tB->size(),
 			&scalA,
 			tB->devDataPtr(),
@@ -222,7 +222,7 @@ void Perceptor::matMult(dtype scalA, Tensor* tB) {
 	syncGpuStream();
 }
 
-Tensor* Perceptor::matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta) {
+Tensor* Perceptor::matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta, cublasOperation_t transA, cublasOperation_t transB) {
 	// Check error
 	if (!tA->isSame(*tB)) {
 		cout << "Cannot sum " << tA->name() << " and " << tB->name() << endl;
@@ -242,8 +242,8 @@ Tensor* Perceptor::matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta) {
 
 	CuBLAS_ERROR(
 		cublasSgeam(
-			cuBlasHandle, // Handle
-			CUBLAS_OP_N, CUBLAS_OP_N, // Trans A, Trans B
+			mCublasHandle, // Handle
+			transA, transB, // Trans A, Trans B
 			tA->col(), tA->row(), // m, n
 			&alpha, // Alpha
 			tA->devDataPtr(), tA->col(), // float *A, lda
@@ -257,7 +257,7 @@ Tensor* Perceptor::matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta) {
 	return t_out;
 }
 
-void Perceptor::matSgeam(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta) {
+void Perceptor::matSgeam(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta, cublasOperation_t transA, cublasOperation_t transB) {
 	// Check error
 	if (!tA->isSame(*tB)) {
 		cout << "Cannot sum " << tA->name() << " and " << tB->name() << endl;
@@ -276,8 +276,8 @@ void Perceptor::matSgeam(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, floa
 	// With row major!
 	CuBLAS_ERROR(
 		cublasSgeam(
-			cuBlasHandle, // Handle
-			CUBLAS_OP_N, CUBLAS_OP_N, // Trans A, Trans B
+			mCublasHandle, // Handle
+			transA, transB, // Trans A, Trans B
 			tA->col(), tA->row(), // m, n
 			&alpha, // Alpha
 			tA->devDataPtr(), tA->col(), // float *A, lda
@@ -380,7 +380,7 @@ void Perceptor::matSwap(Tensor* tA, Tensor* tB, bool forceSwap) {
 
 	CuBLAS_ERROR(
 		cublasSswap(
-			cuBlasHandle,
+			mCublasHandle,
 			tA->size(),
 			tA->devDataPtr(),
 			1,
@@ -407,7 +407,7 @@ void Perceptor::matCopy(Tensor* tB, Tensor* tA) {
 
 	CuBLAS_ERROR(
 		cublasScopy(
-			cuBlasHandle,
+			mCublasHandle,
 			tA->size(),
 			tA->devDataPtr(),
 			1,
@@ -429,7 +429,7 @@ int Perceptor::matMaxIndex(Tensor* tA) {
 
 	CuBLAS_ERROR(
 		cublasIsamax(
-			cuBlasHandle,
+			mCublasHandle,
 			tA->size(),
 			tA->devDataPtr(),
 			1,
@@ -452,7 +452,7 @@ int Perceptor::matMinIndex(Tensor* tA) {
 
 	CuBLAS_ERROR(
 		cublasIsamin(
-			cuBlasHandle,
+			mCublasHandle,
 			tA->size(),
 			tA->devDataPtr(),
 			1,
@@ -475,7 +475,7 @@ dtype Perceptor::matSum(Tensor* tA) {
 
 	CuBLAS_ERROR(
 		cublasSasum(
-			cuBlasHandle,
+			mCublasHandle,
 			tA->size(),
 			tA->devDataPtr(),
 			1,
@@ -716,7 +716,7 @@ void Perceptor::fill(Tensor* tA, dtype value) {
 	dtype v = value;
 	CuDNN_ERROR(
 		cudnnSetTensor(
-			cuDnnHandle,
+			mCudnnHandle,
 			tA->tDesc,
 			tA->devDataPtr(),
 			&v
@@ -724,24 +724,27 @@ void Perceptor::fill(Tensor* tA, dtype value) {
 	);
 }
 
-void Perceptor::addBias(Tensor* tA, Tensor* bias, dtype alpha, dtype beta) {
-	dtype a = alpha;
-	dtype b = beta;
-	CuDNN_ERROR(
-		cudnnAddTensor(
-			cuDnnHandle,
-			&a,
-			bias->tDesc,
-			bias->devDataPtr(),
-			&b,
-			tA->tDesc,
-			tA->devDataPtr()
-		)
-	);
+void Perceptor::convolution(Tensor* tOutput, Tensor* tInput, Tensor* tFilter, int* strides, int* padding) {
+
 }
 
-Perceptor* Perceptor::convolution(Tensor* tInput, Tensor* tFilter, Tensor* tOutput) {
+void Perceptor::fullyConnected(Tensor* tOutput, Tensor* tInput, Tensor* tBias) {
 
-
-	return this;
 }
+
+void Perceptor::activation(Tensor* tOutput, Tensor* tInput, cudnnActivationMode_t activationMode) {
+
+}
+
+void Perceptor::operation(Tensor* tOutput, Tensor* tInput, Tensor* tInput2, cudnnOpTensorOp_t operation) {
+
+}
+
+void Perceptor::softmax(Tensor* tOutput, Tensor* tInput) {
+
+}
+
+void Perceptor::batchNormalization(Tensor* tOutput, Tensor* tInput) {
+
+}
+

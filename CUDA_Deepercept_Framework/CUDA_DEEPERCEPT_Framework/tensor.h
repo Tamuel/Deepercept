@@ -1,7 +1,6 @@
 #ifndef TENSOR_H
 #define TENSOR_H
 #include "base.h"
-#include <cudnn.h>
 
 #if defined(NDEBUG) // If release mode
 #define CUDA_CHECK(x) (x)
@@ -61,8 +60,6 @@ private:
 
 	// For access data like tensor
 	int* cumulatedDimension;
-	// For print data like tensor
-	int* reCumulatedDimension;
 
 	// Is this just container for Device pointer
 	bool isContainer;
@@ -336,6 +333,10 @@ public:
 			cout << "There are no device pointer for Tensor data [" << mName << "]" << endl;
 			exit(1);
 		}
+	}
+
+	cudnnTensorDescriptor_t descriptor() {
+		return tDesc;
 	}
 
 	// Deallocate device data

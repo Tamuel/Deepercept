@@ -5,10 +5,18 @@
 
 class SoftmaxLayer : Layer {
 private:
+	dtype mAlpha;
+	dtype mBeta;
+
+	Tensor* mInput;
+	Tensor* mOutput;
 
 public:
+	SoftmaxLayer(Perceptor* aPerceptor) {
+		mPerceptor = aPerceptor;
 
-	SoftmaxLayer() {
+		mAlpha = 1;
+		mBeta = 0;
 
 	}
 
@@ -16,9 +24,17 @@ public:
 
 	}
 
-	void forwardPropagation();
+	// tInput -> Propagate -> tOutput
+	virtual void forwardPropagation(Tensor* tInput, Tensor* tOutput);
 
-	void backwardPropagation();
+	// gOutput <- Backpropagate <- gInput
+	virtual void backwardPropagation(Tensor* gInput, Tensor* gOutput);
+
+	// tInput -> Propagate -> tOutput
+	virtual void forwardPropagation(Tensor* tInputA, Tensor* tInputB, Tensor* tOutput);
+
+	// gOutput <- Backpropagate <- gInput
+	virtual void backwardPropagation(Tensor* gInput, Tensor* gOutputA, Tensor* gOutputB);
 };
 
 #endif

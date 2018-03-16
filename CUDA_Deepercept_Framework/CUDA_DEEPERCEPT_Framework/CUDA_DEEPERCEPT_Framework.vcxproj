@@ -169,15 +169,31 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="activationLayer.cpp" />
     <ClCompile Include="base.cpp" />
+    <ClCompile Include="batchNormalizationLayer.cpp" />
+    <ClCompile Include="convolutionLayer.cpp" />
+    <ClCompile Include="fullyConnectedLayer.cpp" />
+    <ClCompile Include="layer.cpp" />
+    <ClCompile Include="operationLayer.cpp" />
+    <ClCompile Include="poolingLayer.cpp" />
+    <ClCompile Include="softmaxLayer.cpp" />
     <ClCompile Include="tensor.h" />
     <CudaCompile Include="__init__.cu">
       <FileType>CppCode</FileType>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="activationLayer.h" />
     <ClInclude Include="base.h" />
+    <ClInclude Include="batchNormalizationLayer.h" />
+    <ClInclude Include="convolutionLayer.h" />
+    <ClInclude Include="fullyConnectedLayer.h" />
+    <ClInclude Include="layer.h" />
+    <ClInclude Include="operationLayer.h" />
     <ClInclude Include="perceptor.h" />
+    <ClInclude Include="poolingLayer.h" />
+    <ClInclude Include="softmaxLayer.h" />
     <ClInclude Include="srcMeasure.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

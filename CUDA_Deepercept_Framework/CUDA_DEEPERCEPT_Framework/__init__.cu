@@ -37,7 +37,6 @@ int main(void) {
 	k3(0, 0, 0, 0) = 2;
 	k3(0, 0, 1, 0) = 4;
 	k3.printTensor();
-	
 
 	p1.testNetwork();
 

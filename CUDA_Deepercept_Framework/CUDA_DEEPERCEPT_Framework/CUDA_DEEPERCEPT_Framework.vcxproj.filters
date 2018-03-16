@@ -16,6 +16,9 @@
     <Filter Include="Source\GUI">
       <UniqueIdentifier>{d27a45ed-c622-43d9-920c-2f125395b6f4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source\Layer">
+      <UniqueIdentifier>{f25664f3-6e15-44ef-b752-b7501ad8a544}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="kernel.cu">
@@ -38,6 +41,30 @@
     <ClCompile Include="base.cpp">
       <Filter>Source\Base</Filter>
     </ClCompile>
+    <ClCompile Include="layer.cpp">
+      <Filter>Source\Layer</Filter>
+    </ClCompile>
+    <ClCompile Include="fullyConnectedLayer.cpp">
+      <Filter>Source\Layer</Filter>
+    </ClCompile>
+    <ClCompile Include="convolutionLayer.cpp">
+      <Filter>Source\Layer</Filter>
+    </ClCompile>
+    <ClCompile Include="activationLayer.cpp">
+      <Filter>Source\Layer</Filter>
+    </ClCompile>
+    <ClCompile Include="operationLayer.cpp">
+      <Filter>Source\Layer</Filter>
+    </ClCompile>
+    <ClCompile Include="softmaxLayer.cpp">
+      <Filter>Source\Layer</Filter>
+    </ClCompile>
+    <ClCompile Include="batchNormalizationLayer.cpp">
+      <Filter>Source\Layer</Filter>
+    </ClCompile>
+    <ClCompile Include="poolingLayer.cpp">
+      <Filter>Source\Layer</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base.h">
@@ -48,6 +75,30 @@
     </ClInclude>
     <ClInclude Include="srcMeasure.h">
       <Filter>Source\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="layer.h">
+      <Filter>Source\Layer</Filter>
+    </ClInclude>
+    <ClInclude Include="fullyConnectedLayer.h">
+      <Filter>Source\Layer</Filter>
+    </ClInclude>
+    <ClInclude Include="convolutionLayer.h">
+      <Filter>Source\Layer</Filter>
+    </ClInclude>
+    <ClInclude Include="activationLayer.h">
+      <Filter>Source\Layer</Filter>
+    </ClInclude>
+    <ClInclude Include="operationLayer.h">
+      <Filter>Source\Layer</Filter>
+    </ClInclude>
+    <ClInclude Include="softmaxLayer.h">
+      <Filter>Source\Layer</Filter>
+    </ClInclude>
+    <ClInclude Include="batchNormalizationLayer.h">
+      <Filter>Source\Layer</Filter>
+    </ClInclude>
+    <ClInclude Include="poolingLayer.h">
+      <Filter>Source\Layer</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

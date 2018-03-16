@@ -6,11 +6,8 @@
 #include "layer.h"
 #include "srcMeasure.h"
 #include "layer.h"
+#include <memory>
 #include <vector>
-#include <cublas.h>
-#include <cublas_v2.h>
-#include <cublas_api.h>
-#include <cudnn.h>
 
 #pragma once
 #ifdef __INTELLISENSE__
@@ -29,110 +26,31 @@ typedef struct threadBlocks tBlocks;
 class Perceptor{
 private:
 	// Store which GPU is now utilize
-	static bool gpuUtilization[N_MAXIMUM_GPU];
+	static bool GPU_UTILIZATION[N_MAXIMUM_GPU];
 
 	// Handle for cuBals
-	cublasHandle_t cuBlasHandle;
+	cublasHandle_t mCublasHandle;
 
 	// Handle for cuDNN
-	cudnnHandle_t cuDnnHandle;
+	cudnnHandle_t mCudnnHandle;
 
 	// Layer vector for deeplearning
-	vector<Layer> layers;
+	//vector<unique_ptr<Layer>> mLayers;
 
 	// Dummy tensor for matrix calculation efficiency
 	Tensor* dummyTensor;
 
 	// Set true if you want to debug and carry about limit condition of operations, if you don't need that then set false
-	bool debugMode;
+	bool mDebugMode;
 
 	// Specific GPU ID for this perceptor
 	int mDeviceId;
 
 	// To synchronize GPU stream or not
-	bool synchronizeStream;
-
-	void CuBLAS_ERROR(cublasStatus_t error) {
-		switch (error) {
-		case CUBLAS_STATUS_SUCCESS:
-			return;
-		case CUBLAS_STATUS_NOT_INITIALIZED:
-			cerr << "cuBLAS : Library was not initialized." << endl;
-			break;
-		case CUBLAS_STATUS_ALLOC_FAILED:
-			cerr << "cuBLAS : Resource allocation failed." << endl;
-			break;
-		case CUBLAS_STATUS_INVALID_VALUE:
-			cerr << "cuBLAS : An unsupported value or parameter was passed to the function." << endl;
-			break;
-		case CUBLAS_STATUS_ARCH_MISMATCH:
-			cerr << "cuBLAS : The function requires a feature absent from the device architecture;" <<
-				" usually casued by the lack of support for double precision." << endl;
-			break;
-		case CUBLAS_STATUS_MAPPING_ERROR:
-			cerr << "cuBLAS : An access to GPU memory space failed." << endl;
-			break;
-		case CUBLAS_STATUS_EXECUTION_FAILED:
-			cerr << "cuBLAS : The GPU program failed to execute." << endl;
-			break;
-		case CUBLAS_STATUS_INTERNAL_ERROR:
-			cerr << "cuBLAS : An internal cuBLAS operation failed." << endl;
-			break;
-		case CUBLAS_STATUS_NOT_SUPPORTED:
-			cerr << "cuBLAS : The functionnality requested is not supported." << endl;
-			break;
-		case CUBLAS_STATUS_LICENSE_ERROR:
-			cerr << "cuBLAS : The functionnality requested requires some license and an error" <<
-				" was detected when trying to check the current licensing." << endl;
-			break;
-		}
-		cerr << " File : " << __FILE__ << ", Line : " << __LINE__ << endl;
-		exit(EXIT_FAILURE);
-	}
-
-	void CuDNN_ERROR(cudnnStatus_t error) {
-		switch (error) {
-		case CUDNN_STATUS_SUCCESS:
-			return;
-		case CUDNN_STATUS_NOT_INITIALIZED:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : Library was not initialized." << endl;
-			break;
-		case CUDNN_STATUS_INVALID_VALUE:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : An incorrect value or parameter was passed." << endl;
-			break;
-		case CUDNN_STATUS_ALLOC_FAILED:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : Resource allocation failed." << endl;
-			break;
-		case CUDNN_STATUS_BAD_PARAM:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : An incorrect value or parameter was passed." << endl;
-			break;
-		case CUDNN_STATUS_ARCH_MISMATCH:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : The function requires a feature absent from the device architecture;" <<
-				" usually casued by the lack of support for double precision." << endl;
-			break;
-		case CUDNN_STATUS_MAPPING_ERROR:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : An access to GPU memory space failed." << endl;
-			break;
-		case CUDNN_STATUS_EXECUTION_FAILED:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : The GPU program failed to execute." << endl;
-			break;
-		case CUDNN_STATUS_INTERNAL_ERROR:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : An internal cuBLAS operation failed." << endl;
-			break;
-		case CUDNN_STATUS_NOT_SUPPORTED:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : The functionnality requested is not supported." << endl;
-			break;
-		case CUDNN_STATUS_LICENSE_ERROR:
-			cerr << "cuDNN(" << cudnnGetErrorString(error) << ") : The functionnality requested requires some license and an error" <<
-				" was detected when trying to check the current licensing." << endl;
-			break;
-		}
-		cerr << " File : " << __FILE__ << ", Line : " << __LINE__ << endl;
-		exit(EXIT_FAILURE);
-	}
+	bool mSynchronizeStream;
 
 	void syncGpuStream() {
-		if (synchronizeStream) {
+		if (mSynchronizeStream) {
 			cudaDeviceSynchronize();
 		}
 	}
@@ -151,29 +69,29 @@ private:
 	tBlocks getThreadBlocks(Tensor* tA);
 
 	void debugOut(string s) {
-		if (debugMode) cout << "Perceptor" << deviceId() << "[" << s << "]" << endl;
+		if (mDebugMode) cout << "Perceptor" << deviceId() << "[" << s << "]" << endl;
 	}
 
 public:
 	Perceptor(int aDeviceId = 0, bool aDebugMode = true) {
-		if (gpuUtilization[aDeviceId] == true) {
+		if (GPU_UTILIZATION[aDeviceId] == true) {
 			cout << "GPU" << aDeviceId << " already assigned" << endl;
 			exit(EXIT_FAILURE);
 		}
 
-		debugMode = aDebugMode;
+		mDebugMode = aDebugMode;
 
 		mDeviceId = aDeviceId;
-		gpuUtilization[mDeviceId] = true;
-		synchronizeStream = true;
+		GPU_UTILIZATION[mDeviceId] = true;
+		mSynchronizeStream = true;
 
 		cudaSetDevice(mDeviceId);
 		debugOut("Set device");
 
-		CuBLAS_ERROR(cublasCreate(&cuBlasHandle));
+		CuBLAS_ERROR(cublasCreate(&mCublasHandle));
 		debugOut("Initialize cuBlas");
 
-		CuDNN_ERROR(cudnnCreate(&cuDnnHandle));
+		CuDNN_ERROR(cudnnCreate(&mCudnnHandle));
 		debugOut("Initialize cuDNN");
 
 		debugOut("Create dummy tensor for calculation");
@@ -185,13 +103,13 @@ public:
 	}
 
 	~Perceptor() {
-		gpuUtilization[mDeviceId] = false;
-		cublasDestroy(cuBlasHandle);
-		cudnnDestroy(cuDnnHandle);
+		GPU_UTILIZATION[mDeviceId] = false;
+		cublasDestroy(mCublasHandle);
+		cudnnDestroy(mCudnnHandle);
 	}
 
 	void setSynchronizeGpuStream(bool aSync) {
-		synchronizeStream = aSync;
+		mSynchronizeStream = aSync;
 	}
 
 	// Check device ID of perceptor and device ID of tensor tA are same
@@ -199,9 +117,11 @@ public:
 
 	// Matrix operations
 	// Return = alpha * ( tA x tB ) + beta * Out
-	Tensor* matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta);
+	Tensor* matSgemm(Tensor* tA, Tensor* tB, float alpha, float beta,
+		cublasOperation_t transA = CUBLAS_OP_N, cublasOperation_t transB = CUBLAS_OP_N);
 	// tOut = alpha * ( tA x tB ) + beta * Out
-	void matSgemm(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta);
+	void matSgemm(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta,
+		cublasOperation_t transA = CUBLAS_OP_N, cublasOperation_t transB = CUBLAS_OP_N);
 
 	// Return = tA x tB
 	Tensor* matMult(Tensor* tA, Tensor* tB);
@@ -212,23 +132,25 @@ public:
 	void matMult(dtype scalA, Tensor* tB);
 
 	// Return = alpha * tA + beta * tB
-	Tensor* matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta);
+	Tensor* matSgeam(Tensor* tA, Tensor* tB, float alpha, float beta,
+		cublasOperation_t transA = CUBLAS_OP_N, cublasOperation_t transB = CUBLAS_OP_N);
 	// tOut = alpha * tA + beta * tB
-	void matSgeam(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta);
+	void matSgeam(Tensor* tOut, Tensor* tA, Tensor* tB, float alpha, float beta,
+		cublasOperation_t transA = CUBLAS_OP_N, cublasOperation_t transB = CUBLAS_OP_N);
 
 	// Return = tA + tB
 	Tensor* matAdd(Tensor* tA, Tensor* tB);
-	// tOut = tA + tB
+	// tOut = tA + tB (Can be inplace)
 	void matAdd(Tensor* tOut, Tensor* tA, Tensor* tB);
 
 	// Return = tA - tB
 	Tensor* matSub(Tensor* tA, Tensor* tB);
-	// tOut = tA - tB
+	// tOut = tA - tB  (Can be inplace)
 	void matSub(Tensor* tOut, Tensor* tA, Tensor* tB);
 
 	// Return = tA * tB (Haramard Product)
 	Tensor* matEltMult(Tensor* tA, Tensor* tB);
-	// tOut = tA * tB (Haramard Product)
+	// tOut = tA * tB (Haramard Product, Can be inplace)
 	void matEltMult(Tensor* tOut, Tensor* tA, Tensor* tB);
 
 	// Swap two tensors, tA = tB, tB = tA.
@@ -288,6 +210,16 @@ public:
 
 	void softmax(Tensor* tOutput, Tensor* tInput);
 
+	void batchNormalization(Tensor* tOutput, Tensor* tInput);
+
+	cudnnHandle_t cudnnHandle() {
+		return mCudnnHandle;
+	}
+
+	cublasHandle_t cublasHandle() {
+		return mCublasHandle;
+	}
+
 	void testNetwork() {
 		Tensor bias({ 1, 1, 3, 3 }, "temp", 2.3); // NCHW
 		Tensor dest({ 1, 1, 3, 3 }, "temp2", 2.5); // NCHW
@@ -309,7 +241,7 @@ public:
 		sm.endTime(0, "Send dest");
 		float value = 3.5;
 		cudnnSetTensor(
-			cuDnnHandle,
+			mCudnnHandle,
 			t_desc,
 			dest.devDataPtr(),
 			&value
@@ -318,7 +250,7 @@ public:
 		float alpha = 1;
 		CuDNN_ERROR(
 			cudnnAddTensor( // Add bias to dest
-				cuDnnHandle,
+				mCudnnHandle,
 				&alpha, // Coefficient
 				t_desc, // Bias tensor descriptor
 				bias.devDataPtr(), // Bias tensor data pointer
@@ -336,7 +268,7 @@ public:
 		float beta = 0;
 		CuDNN_ERROR(
 			cudnnOpTensor(
-				cuDnnHandle,
+				mCudnnHandle,
 				t_op_desc,
 				&alpha,
 				t_desc,
@@ -354,7 +286,7 @@ public:
 		float scale = 1.5;
 		CuDNN_ERROR(
 			cudnnScaleTensor(
-				cuDnnHandle,
+				mCudnnHandle,
 				t_desc,
 				dest2.devDataPtr(),
 				&scale
@@ -382,6 +314,7 @@ public:
 			)
 		);
 
+		sm.startTime(0);
 		int n, c, h, w;
 		cudnnGetConvolution2dForwardOutputDim(
 			conv_desc,
@@ -392,6 +325,7 @@ public:
 			&h,
 			&w
 		);
+		sm.endTime(0, "Conv get dim");
 
 		Tensor conv1({ n, c, h, w }, "Conv1", 0);
 		conv1.printShape();
@@ -413,7 +347,7 @@ public:
 		int returnedAlgoCount[3];
 		cudnnConvolutionFwdAlgoPerf_t conv_perf[3];
 		cudnnFindConvolutionForwardAlgorithm(
-			cuDnnHandle,
+			mCudnnHandle,
 			t_desc,
 			filter_desc,
 			conv_desc,
@@ -428,7 +362,7 @@ public:
 		sendTensorToDevice(&conv_input);
 		dtype k = 1;
 		cudnnSetTensor(
-			cuDnnHandle,
+			mCudnnHandle,
 			t_desc,
 			conv_input.devDataPtr(),
 			&k
@@ -442,7 +376,7 @@ public:
 
 		size_t convFwdWorkspaceSize;
 		cudnnGetConvolutionForwardWorkspaceSize(
-			cuDnnHandle,
+			mCudnnHandle,
 			t_desc,
 			filter_desc,
 			conv_desc,
@@ -457,7 +391,7 @@ public:
 		alpha = 1; beta = 0;
 		CuDNN_ERROR(
 			cudnnConvolutionForward( // Column major approach
-				cuDnnHandle, // Handle
+				mCudnnHandle, // Handle
 				&alpha, // Alpha : Input tensor coefficient
 				t_desc, // xDesc
 				conv_input.devDataPtr(), // *x
@@ -480,7 +414,7 @@ public:
 		int returnCount;
 		cudnnConvolutionBwdFilterAlgoPerf_t perfResult;
 		cudnnFindConvolutionBackwardFilterAlgorithm(
-			cuDnnHandle,
+			mCudnnHandle,
 			t_desc,
 			t_desc,
 			conv_desc,
@@ -494,7 +428,7 @@ public:
 
 		cudnnConvolutionBwdDataAlgoPerf_t perfData;
 		cudnnFindConvolutionBackwardDataAlgorithm(
-			cuDnnHandle,
+			mCudnnHandle,
 			filter_desc,
 			t_desc,
 			conv_desc,
@@ -509,7 +443,7 @@ public:
 
 		size_t backfilterWorkspaceSize;
 		cudnnGetConvolutionBackwardFilterWorkspaceSize(
-			cuDnnHandle,
+			mCudnnHandle,
 			t_desc,
 			t_desc,
 			conv_desc,
@@ -523,7 +457,7 @@ public:
 		dtype* workspaceFilter;
 		cudaMalloc((void**)&workspaceFilter, backfilterWorkspaceSize);
 		cudnnConvolutionBackwardFilter(
-			cuDnnHandle,
+			mCudnnHandle,
 			&alpha,
 			t_desc,
 			conv_input.devDataPtr(),
@@ -543,7 +477,7 @@ public:
 
 		size_t backWorkspaceSize;
 		cudnnGetConvolutionBackwardDataWorkspaceSize(
-			cuDnnHandle,
+			mCudnnHandle,
 			filter_desc,
 			t_desc,
 			conv_desc,
@@ -558,7 +492,7 @@ public:
 		dtype* workspace;
 		cudaMalloc((void**)&workspace, backWorkspaceSize);
 		cudnnConvolutionBackwardData(
-			cuDnnHandle,
+			mCudnnHandle,
 			&alpha,
 			filter_desc,
 			conv_filter1.devDataPtr(),
@@ -579,7 +513,7 @@ public:
 		Tensor softmaxOut({ 1, 1, 3, 3 });
 		sendTensorToDevice(&softmaxOut);
 		cudnnSoftmaxForward(
-			cuDnnHandle,
+			mCudnnHandle,
 			CUDNN_SOFTMAX_FAST,
 			CUDNN_SOFTMAX_MODE_INSTANCE,
 			&alpha,
@@ -598,7 +532,7 @@ public:
 		sendTensorToDevice(&softmaxGrad);
 		CuDNN_ERROR(
 			cudnnSoftmaxBackward(
-				cuDnnHandle,
+				mCudnnHandle,
 				CUDNN_SOFTMAX_FAST,
 				CUDNN_SOFTMAX_MODE_INSTANCE,
 				&alpha,
@@ -654,7 +588,7 @@ public:
 		sendTensorToDevice(&poolOutTensor);
 
 		cudnnPoolingForward(
-			cuDnnHandle,
+			mCudnnHandle,
 			pooling_desc,
 			&alpha,
 			t_desc,
@@ -671,7 +605,7 @@ public:
 		Tensor poolBackTensor({ 1, 1, 3, 3 }, "poolBackTensor", 0);
 		sendTensorToDevice(&poolBackTensor);
 		cudnnPoolingBackward(
-			cuDnnHandle,
+			mCudnnHandle,
 			pooling_desc,
 			&alpha,
 			pool_out_desc,
@@ -701,7 +635,7 @@ public:
 		sendTensorToDevice(&reluOut);
 
 		cudnnActivationForward(
-			cuDnnHandle,
+			mCudnnHandle,
 			activation_desc,
 			&alpha,
 			t_desc,
@@ -718,7 +652,7 @@ public:
 		sendTensorToDevice(&reluBack);
 
 		cudnnActivationBackward(
-			cuDnnHandle,
+			mCudnnHandle,
 			activation_desc,
 			&alpha,
 			t_desc,
@@ -748,7 +682,7 @@ public:
 		sendTensorToDevice(&lrnOut);
 
 		cudnnLRNCrossChannelForward(
-			cuDnnHandle,
+			mCudnnHandle,
 			lrn_desc,
 			CUDNN_LRN_CROSS_CHANNEL_DIM1,
 			&alpha,
@@ -764,7 +698,7 @@ public:
 		Tensor lrnBack({ 1, 1, 3, 3 }, "lrnBack", 0);
 		sendTensorToDevice(&lrnBack);
 		cudnnLRNCrossChannelBackward(
-			cuDnnHandle,
+			mCudnnHandle,
 			lrn_desc,
 			CUDNN_LRN_CROSS_CHANNEL_DIM1,
 			&alpha,
@@ -815,7 +749,7 @@ public:
 		cudaMalloc((void**)&estimatedVariance, sizeof(dtype) * 1 * 1 * 3 * 3);
 
 		cudnnBatchNormalizationForwardInference(
-			cuDnnHandle,
+			mCudnnHandle,
 			CUDNN_BATCHNORM_PER_ACTIVATION,
 			&alpha,
 			&beta,
@@ -840,7 +774,7 @@ public:
 		cudaMalloc((void**)&resultSaveInvVaraiance, sizeof(dtype) * 1 * 1 * 3 * 3);
 
 		cudnnBatchNormalizationForwardTraining(
-			cuDnnHandle,
+			mCudnnHandle,
 			CUDNN_BATCHNORM_PER_ACTIVATION,
 			&alpha,
 			&beta,
@@ -868,7 +802,7 @@ public:
 		cudaMalloc((void**)&savedInvVariance, sizeof(dtype) * 1 * 1 * 3 * 3);
 
 		cudnnBatchNormalizationBackward(
-			cuDnnHandle,
+			mCudnnHandle,
 			CUDNN_BATCHNORM_PER_ACTIVATION,
 			&alpha, &beta, &alpha, &beta,
 			t_desc,
@@ -891,7 +825,7 @@ public:
 		
 		size_t dropoutStatesSize;
 		cudnnDropoutGetStatesSize(
-			cuDnnHandle,
+			mCudnnHandle,
 			&dropoutStatesSize
 		);
 
@@ -905,7 +839,7 @@ public:
 		cudaMalloc((void**)&dropout_states, dropoutStatesSize);
 		cudnnSetDropoutDescriptor(
 			dropout_desc,
-			cuDnnHandle,
+			mCudnnHandle,
 			0.5, // Dropout rate
 			dropout_states,
 			dropoutStatesSize,
@@ -928,7 +862,7 @@ public:
 		dropSample.printTensor();
 
 		cudnnDropoutForward(
-			cuDnnHandle,
+			mCudnnHandle,
 			dropout_desc,
 			t_desc,
 			dropSample.devDataPtr(),
@@ -946,7 +880,7 @@ public:
 		sendTensorToDevice(&dropBack);
 
 		cudnnDropoutBackward(
-			cuDnnHandle,
+			mCudnnHandle,
 			dropout_desc,
 			t_desc,
 			dropOutFwd.devDataPtr(),
@@ -985,7 +919,7 @@ public:
 		sendTensorToDevice(&grid);
 
 		cudnnSpatialTfGridGeneratorForward(
-			cuDnnHandle,
+			mCudnnHandle,
 			trans_desc,
 			theta,
 			grid.devDataPtr()
